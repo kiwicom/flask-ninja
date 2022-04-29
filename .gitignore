@@ -1,0 +1,75 @@
+## Secrets
+secrets*
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# BackUps
+*.orig
+*~
+*.sw[po]
+.tags
+
+# Packages
+*.egg
+*.egg-info
+.eggs/
+dist
+build
+eggs
+parts
+bin
+var
+sdist
+develop-eggs
+.installed.cfg
+lib
+lib64
+__samples__
+__outputs__
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+nosetests.xml
+*_test.py
+
+# Translations
+*.mo
+
+# Mr Developer
+.mr.developer.cfg
+.project
+.pydevproject
+.env
+*.sublime-*
+.idea/
+skypicker.iml
+
+# Celery
+celerybeat-schedule
+*.html
+
+# Data folder for scrapers
+all_scrapers/data
+
+
+# python virtual environment
+venv
+
+
+# SSH keys
+id_rsa*
+
+# Pytest
+*.pytest_cache*
+
+# poetry lock in packages
+pkg/*/poetry.lock

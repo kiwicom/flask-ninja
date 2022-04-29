@@ -1,0 +1,85 @@
+[tool.poetry]
+name = "flask-ninja"
+version = "0.1.0"
+description = ""
+authors = ["Michal Korbela <michal.korbela@kiwi.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+Flask = ">=1.1.2"
+pydantic = "^1.9.0"
+docstring-parser = "^0.14.1"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+known_third_party = ["click", "flask", "pydantic", "pytest", "request_session", "requests", "structlog", "typing_extensions", "werkzeug", "yaml"]
+
+[tool.pylint]
+[tool.pylint.master]
+jobs=0
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = ['duplicate-code,missing-docstring,line-too-long,no-member,relative-import,wrong-import-position,locally-disabled,abstract-method,no-self-use,fixme,too-few-public-methods,ungrouped-imports,bad-continuation,invalid-name,too-many-arguments,too-many-locals,too-many-instance-attributes,too-many-branches,too-many-public-methods,no-name-in-module,redefined-outer-name']
+
+[tool.pylint.'REPORTS']
+output-format=['colorized']
+
+
+[tool.pylint.'LOGGING']
+logging-modules=['logging,structlog']
+
+[tool.pydocstyle]
+# D100-D107 ignore missing docstrings
+# D203 disabled in favor of D211
+# D213 disabled in favor of D212
+# D416 Version 4.0.0 added support for Google convention and thus new violations that must be ignored based on the convention
+ignore = ['D100','D101','D102','D103','D104','D105','D106','D107','D203','D213','D416','D401','D407','D413','D202','D405']
+
+
+[tool.mypy]
+files = "**/**.py"
+plugins = [
+    "pydantic.mypy"
+]
+
+ignore_missing_imports = false
+scripts_are_modules = false
+namespace_packages = true
+
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+show_error_context = true
+show_traceback = true
+strict_equality = true
+check_untyped_defs = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+warn_untyped_fields = true
+
+[[tool.mypy.overrides]]
+module = [
+    "tests.*"
+]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "structlog.*",
+    "pytest.*",
+    "yaml.*",
+]
+ignore_missing_imports = true
+ignore_errors = true

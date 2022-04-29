@@ -1,0 +1,68 @@
+name: Build jobs
+# Triggered by changes in code-specific or job-specific files
+
+on:
+  pull_request:
+    paths:
+      - '**.py'
+      - '.github/workflows/*.yml'
+      - 'pyproject.toml'
+      - '!docs/**'
+  push:
+    branches:
+      - master
+
+jobs:
+  pre-commit:
+    name: Generic pre-commit checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v1
+        with:
+          python-version: 3.9
+
+      - run: pip install pre-commit
+      - run: pre-commit run --all-files
+
+  tests:
+    name: tests_${{ matrix.tox_job }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tox_job: [py35, py36, py37, py38, py39, no_pycurl]
+        include:
+          - tox_job: py39
+            python: 3.9
+          - tox_job: py310
+            python: 3.10
+
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python }}
+
+      - run: pip install tox coverage
+
+      - run: sudo apt update && sudo apt install libcurl4-openssl-dev libssl-dev
+
+      - name: Run ${{ matrix.tox_job }} tox job
+        run: tox -e ${{ matrix.tox_job }}
+
+      - run: coverage combine
+      - run: coverage report
+      - run: coverage xml -i
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1.0.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.xml
+          flags: unittests
