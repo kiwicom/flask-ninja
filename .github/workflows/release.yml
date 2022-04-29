@@ -21,7 +21,7 @@ jobs:
         poetry config virtualenvs.create false
     - name: Build a binary wheel and a source tarball
       run: >-
-        poetry publish --build
+        . $HOME/.poetry/env && poetry publish --build
     - name: Publish distribution 📦 to PyPI
       uses: pypa/gh-action-pypi-publish@master
       with:
