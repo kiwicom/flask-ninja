@@ -19,10 +19,9 @@ jobs:
         curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python &&
         . $HOME/.poetry/env &&
         poetry config virtualenvs.create false
-    - name: Build a binary wheel and a source tarball
+    - name: Build and publish package
       run: >-
         . $HOME/.poetry/env && poetry publish --build
-    - name: Publish distribution 📦 to PyPI
-      uses: pypa/gh-action-pypi-publish@master
       with:
         POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
+
