@@ -56,13 +56,13 @@ jobs:
       - name: Run ${{ matrix.tox_job }} tox job
         run: tox -e ${{ matrix.tox_job }}
 
-      - run: coverage combine
-      - run: coverage report
-      - run: coverage xml -i
+#      - run: coverage combine
+#      - run: coverage report
+#      - run: coverage xml -i
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1.0.2
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
-          flags: unittests
+#      - name: Upload coverage to Codecov
+#        uses: codecov/codecov-action@v1.0.2
+#        with:
+#          token: ${{ secrets.CODECOV_TOKEN }}
+#          file: ./coverage.xml
+#          flags: unittests
