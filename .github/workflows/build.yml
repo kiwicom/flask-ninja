@@ -33,12 +33,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        tox_job: [py35, py36, py37, py38, py39, no_pycurl]
+        tox_job: [py39, py310]
         include:
           - tox_job: py39
             python: 3.9
           - tox_job: py310
-            python: 3.10
+            python: 3.10.4
 
     steps:
       - uses: actions/checkout@v1
