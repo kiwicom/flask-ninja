@@ -46,13 +46,13 @@ class Operation:
         self.path = path
         self.method = method
         self.view_func = view_func
+        self.definitions: dict = {}
         self.responses = self._sanitize_responses(responses, self.view_func)
         self.callbacks = callbacks
         self.summary = summary
         self.description = description
         self.auth = auth
         self.params = params or self._parse_params(path)
-        self.definitions: dict = {}
 
     def run(self, *args: Any, **kwargs: Any) -> Any:
         # Run authentication if configured

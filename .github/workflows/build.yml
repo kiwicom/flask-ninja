@@ -69,6 +69,7 @@ jobs:
 
   build-n-publish:
     name: Build and publish Python 🐍distributions 📦 to PyPI
+    environment: secrets
     runs-on: ubuntu-18.04
     steps:
     - uses: actions/checkout@v1
@@ -88,4 +89,3 @@ jobs:
       uses: pypa/gh-action-pypi-publish@master
       with:
         password: ${{ secrets.PYPI_TOKEN }}
-

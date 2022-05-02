@@ -19,7 +19,7 @@ class HttpAuthBase(abc.ABC):
 
 class HttpBearer(HttpAuthBase, abc.ABC):
 
-    schema_name: str = "tokenAuth"
+    schema_name: str = "bearerTokenAuth"
     openapi_scheme: str = "bearer"
     header: str = "Authorization"
 

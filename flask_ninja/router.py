@@ -6,6 +6,7 @@ from flask import Flask
 
 from flask_ninja.constants import NOT_SET
 from flask_ninja.operation import Callback, Operation
+from flask_ninja.param import Param
 
 
 class Router:
@@ -37,6 +38,7 @@ class Router:
         auth: Any = NOT_SET,
         summary: str = "",
         description: str = "",
+        params: Optional[dict[str, Param]] = None,
         callbacks: Optional[list[Callback]] = None,
     ) -> Callable:
         def decorator(func: Callable) -> Callable:
@@ -48,6 +50,7 @@ class Router:
                 auth=auth if auth != NOT_SET else self.auth,
                 summary=summary,
                 description=description,
+                params=params,
                 callbacks=callbacks,
             )
             self.add_operation(operation)

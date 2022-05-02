@@ -24,4 +24,3 @@ jobs:
         . $HOME/.poetry/env && poetry publish --build
       with:
         POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-
