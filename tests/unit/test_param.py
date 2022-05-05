@@ -1,6 +1,3 @@
-from pydantic import schema_json_of
-
-from flask_ninja.api import Server
 from flask_ninja.param import Param, ParamType
 
 
@@ -54,7 +51,3 @@ def test_param_defaults_int():
 def test_param_defaults_str():
     param = Param("param", str, param_type=ParamType.QUERY)
     assert param.schema["schema"]["type"] == "string"
-
-
-def test_etc_schema():
-    print(schema_json_of(Server))

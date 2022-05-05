@@ -28,6 +28,13 @@ class Callback(BaseModel):
         arbitrary_types_allowed = True
 
 
+class SerializationModel(BaseModel):
+    data: Any
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
 class Operation:
     """Operation represents handler for one endpoint."""
 
@@ -97,7 +104,7 @@ class Operation:
             # convert all response codes to ints
             responses = {int(k): v for k, v in responses.items()}
 
-        # If 200 response code wasn't specified, try to generate it from return type
+        # If responses weren't specified, try to generate it from return type
         if not responses:
             # It can't be an Union
             if func_return_type is None or get_origin(func_return_type) == Union:
@@ -121,19 +128,12 @@ class Operation:
         return responses
 
     @classmethod
-    def serialize(cls, resp: Union[BaseModel, list, dict]) -> Any:
-        """Recursively serialize objects.
+    def serialize(cls, resp: Any) -> Any:
+        """Convert response object into json serializable object.
 
-        TODO: apply somehow pydantic serialization to all objects
+        TODO: Avoid json serialization and deserialization.
         """
-        if isinstance(resp, list):
-            return [cls.serialize(item) for item in resp]
-        if isinstance(resp, dict):
-            return {k: cls.serialize(v) for k, v in resp.items()}
-        if isinstance(resp, BaseModel):
-            return json.loads(resp.json())
-
-        raise ValueError(f"Unknown type: {type(resp)}")
+        return json.loads(SerializationModel(data=resp).json())["data"]
 
     def _obj_schema(self, obj: Any) -> dict:
         """Generate schema for a model using pydantic and store definitions."""
@@ -225,7 +225,7 @@ class Operation:
         for param_name, param in self.view_func.__annotations__.items():
             if param_name == "return":
                 continue
-            if isinstance(param, (list, dict, tuple)) or issubclass(param, BaseModel):
+            if get_origin(param) in (list, dict, tuple) or issubclass(param, BaseModel):
                 body_params[param_name] = Param(
                     name=param_name,
                     model=param,
@@ -249,6 +249,7 @@ class Operation:
                         "description": param_docs.get(param_name, ""),
                     },
                 )
+
         return query_params, body_params
 
     def _parse_params(self, path: str) -> dict[str, Param]:
@@ -271,13 +272,12 @@ class Operation:
             # We recognized the param as path param, not query param
             if param in query_params:
                 del query_params[param]
-            else:
-                raise ApiConfigError(f"Function is missing {param} argument")
-
-            if param in body_params:
+            elif param in body_params:
                 raise ApiConfigError(
                     f"Param of type {type(body_params[param])} can't be path param."
                 )
+            else:
+                raise ApiConfigError(f"Function is missing {param} argument")
 
         if len(body_params) > 1:
             raise ApiConfigError("Multiple complex objects in function arguments.")

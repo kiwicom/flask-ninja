@@ -10,10 +10,15 @@ from flask_ninja.param import Param
 
 
 class Router:
-    def __init__(self, auth: Any = NOT_SET, app: Optional[Flask] = None):
+    def __init__(
+        self,
+        auth: Any = NOT_SET,
+        app: Optional[Flask] = None,
+        operations: Optional[list[Operation]] = None,
+    ):
         self.app = app
         self.auth = auth
-        self.operations: list[Operation] = []
+        self.operations: list[Operation] = operations or []
 
     def get(self, path: str, **kwargs: Any) -> Callable:
         return self.add_route("GET", path, **kwargs)

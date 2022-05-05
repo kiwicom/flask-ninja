@@ -7,20 +7,24 @@ on:
 jobs:
   build-n-publish:
     name: Build and publish Python 🐍distributions 📦 to PyPI
+    environment: secrets
     runs-on: ubuntu-18.04
     steps:
-    - uses: actions/checkout@master
+    - uses: actions/checkout@v1
     - name: Set up Python 3.9
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v2
       with:
         python-version: 3.9
     - name: Install Poetry
       run: >-
         curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python &&
         . $HOME/.poetry/env &&
-        poetry config virtualenvs.create false
+        poetry config virtualenvs.create false &&
+        find flask_ninja -type d | xargs -I {} touch {}/py.typed
     - name: Build and publish package
       run: >-
-        . $HOME/.poetry/env && poetry publish --build
+        . $HOME/.poetry/env && poetry build
+    - name: Publish distribution 📦 to PyPI
+      uses: pypa/gh-action-pypi-publish@master
       with:
-        POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
+        password: ${{ secrets.PYPI_TOKEN }}
