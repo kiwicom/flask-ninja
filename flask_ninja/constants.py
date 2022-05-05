@@ -3,6 +3,9 @@ from typing import Any
 
 
 class NOT_SET:
+    def __bool__(self) -> bool:
+        return False
+
     def __copy__(self) -> Any:
         return NOT_SET
 

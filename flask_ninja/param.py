@@ -22,13 +22,14 @@ class Param:
 
     def __init__(
         self,
+        name: str,
         model: Any,
         param_type: ParamType,
         schema: Optional[dict] = None,
-        name: str = "",
         description: str = "",
         required: bool = False,
     ):
+        self.name = name
         self.model = model
         self.param_type = param_type
         self.schema = schema or self.default_schema(

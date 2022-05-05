@@ -6,13 +6,19 @@ from flask import Flask
 
 from flask_ninja.constants import NOT_SET
 from flask_ninja.operation import Callback, Operation
+from flask_ninja.param import Param
 
 
 class Router:
-    def __init__(self, auth: Any = NOT_SET, app: Optional[Flask] = None):
+    def __init__(
+        self,
+        auth: Any = NOT_SET,
+        app: Optional[Flask] = None,
+        operations: Optional[list[Operation]] = None,
+    ):
         self.app = app
         self.auth = auth
-        self.operations: list[Operation] = []
+        self.operations: list[Operation] = operations or []
 
     def get(self, path: str, **kwargs: Any) -> Callable:
         return self.add_route("GET", path, **kwargs)
@@ -37,6 +43,7 @@ class Router:
         auth: Any = NOT_SET,
         summary: str = "",
         description: str = "",
+        params: Optional[dict[str, Param]] = None,
         callbacks: Optional[list[Callback]] = None,
     ) -> Callable:
         def decorator(func: Callable) -> Callable:
@@ -48,6 +55,7 @@ class Router:
                 auth=auth if auth != NOT_SET else self.auth,
                 summary=summary,
                 description=description,
+                params=params,
                 callbacks=callbacks,
             )
             self.add_operation(operation)

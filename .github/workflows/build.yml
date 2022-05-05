@@ -66,26 +66,3 @@ jobs:
 #          token: ${{ secrets.CODECOV_TOKEN }}
 #          file: ./coverage.xml
 #          flags: unittests
-
-  build-n-publish:
-    name: Build and publish Python 🐍distributions 📦 to PyPI
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: actions/checkout@v1
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.9
-    - name: Install Poetry
-      run: >-
-        curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python &&
-        . $HOME/.poetry/env &&
-        poetry config virtualenvs.create false
-    - name: Build and publish package
-      run: >-
-        . $HOME/.poetry/env && poetry build
-    - name: Publish distribution 📦 to PyPI
-      uses: pypa/gh-action-pypi-publish@master
-      with:
-        password: ${{ secrets.PYPI_TOKEN }}
-
