@@ -1,11 +1,11 @@
 import re
 from typing import Any, Callable, Optional
 
-from flask import Flask
+from flask import Blueprint, Flask, render_template
 from pydantic import BaseModel
+from swagger_ui_bundle import swagger_ui_path  # type:ignore
 
 from .constants import NOT_SET
-from .page import HTML
 from .router import Router
 
 
@@ -26,7 +26,19 @@ class NinjaAPI:
         version: str = "1.0.0",
         servers: Optional[list[Server]] = None,
     ):
-        app.add_url_rule("/docs", "docs", self.get_docs, methods=["GET"])
+        swagger_bp = Blueprint(
+            "swagger_ui",
+            __name__,
+            static_url_path="",
+            static_folder=swagger_ui_path,
+            template_folder=swagger_ui_path,
+        )
+        swagger_bp.add_url_rule(
+            "/",
+            "docs",
+            lambda: render_template("index.j2", openapi_spec_url="/openapi.json"),
+        )
+        app.register_blueprint(swagger_bp, url_prefix="/docs")
         app.add_url_rule("/openapi.json", "openapi", self.get_schema, methods=["GET"])
         self.router = Router(auth=auth, app=app)
         self.title = title
@@ -93,17 +105,3 @@ class NinjaAPI:
             schema["servers"] = [server.dict() for server in self.servers]
 
         return schema
-
-    def get_docs(self) -> str:
-        return HTML.format(
-            spec_url="/openapi.json",
-            spec_path="/openapi.json",
-            client_id="",
-            client_secret="",
-            realm="",
-            app_name=self.title,
-            scope_separator=" ",
-            additional_query_string_params={},
-            use_basic_authentication_with_access_code_grant=False,
-            use_pkce_with_authorization_code_grant=False,
-        )

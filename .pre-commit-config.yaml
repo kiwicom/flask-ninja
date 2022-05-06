@@ -75,3 +75,4 @@ repos:
           - toml
           - types-Flask
           - docstring_parser
+          - swagger_ui_bundle
