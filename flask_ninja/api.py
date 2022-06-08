@@ -3,10 +3,10 @@ from typing import Any, Callable, Optional
 
 from flask import Blueprint, Flask, render_template
 from pydantic import BaseModel
-from swagger_ui_bundle import swagger_ui_path  # type:ignore
 
 from .constants import NOT_SET
 from .router import Router
+from .swagger_ui import swagger_ui_path
 
 
 class Server(BaseModel):

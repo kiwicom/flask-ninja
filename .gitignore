@@ -72,4 +72,4 @@ id_rsa*
 *.pytest_cache*
 
 # poetry lock in packages
-pkg/*/poetry.lock
+poetry.lock
