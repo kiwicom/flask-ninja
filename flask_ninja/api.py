@@ -25,6 +25,8 @@ class NinjaAPI:
         description: str = "",
         version: str = "1.0.0",
         servers: Optional[list[Server]] = None,
+        prefix: str = "",
+        docs_url: str = "/docs",
     ):
         swagger_bp = Blueprint(
             "swagger_ui",
@@ -36,34 +38,39 @@ class NinjaAPI:
         swagger_bp.add_url_rule(
             "/",
             "docs",
-            lambda: render_template("index.j2", openapi_spec_url="/openapi.json"),
+            lambda: render_template(
+                "index.j2", openapi_spec_url=f"{prefix}{docs_url}/openapi.json"
+            ),
         )
-        app.register_blueprint(swagger_bp, url_prefix="/docs")
-        app.add_url_rule("/openapi.json", "openapi", self.get_schema, methods=["GET"])
+        swagger_bp.add_url_rule(
+            "/openapi.json", "openapi", self.get_schema, methods=["GET"]
+        )
+        app.register_blueprint(swagger_bp, url_prefix=f"{prefix}{docs_url}")
         self.router = Router(auth=auth, app=app)
         self.title = title
         self.description = description
         self.version = version
         self.servers = servers
+        self.prefix = prefix
         self.model_definitions: dict[str, Any] = {}
 
     def get(self, path: str, **kwargs: Any) -> Callable:
-        return self.router.add_route("GET", path, **kwargs)
+        return self.router.add_route("GET", self.prefix + path, **kwargs)
 
     def post(self, path: str, **kwargs: Any) -> Callable:
-        return self.router.add_route("POST", path, **kwargs)
+        return self.router.add_route("POST", self.prefix + path, **kwargs)
 
     def put(self, path: str, **kwargs: Any) -> Callable:
-        return self.router.add_route("PUT", path, **kwargs)
+        return self.router.add_route("PUT", self.prefix + path, **kwargs)
 
     def patch(self, path: str, **kwargs: Any) -> Callable:
-        return self.router.add_route("PATCH", path, **kwargs)
+        return self.router.add_route("PATCH", self.prefix + path, **kwargs)
 
     def delete(self, path: str, **kwargs: Any) -> Callable:
-        return self.router.add_route("DELETE", path, **kwargs)
+        return self.router.add_route("DELETE", self.prefix + path, **kwargs)
 
     def add_router(self, router: Router, prefix: str = "") -> None:
-        self.router.add_router(router, prefix)
+        self.router.add_router(router, f"{self.prefix}{prefix}")
 
     def get_schema(self) -> dict:
         """Generate Openapi schema for the API."""

@@ -96,3 +96,20 @@ def test_get_schema(api, snapshot):
         return 2
 
     snapshot.assert_match(json.dumps(api.get_schema()), "api_schema")
+
+
+def test_api_custom_prefix_and_docs_url():
+    app = Flask(__name__)
+    api = NinjaAPI(app, prefix="/prefix", docs_url="/ui")
+
+    @api.get("/endpoint")
+    def endpoint_api_get() -> int:
+        return 2
+
+    resp = api.router.app.test_client().get("/prefix/endpoint")  # type: ignore
+    assert resp.json == 2
+
+    assert api.router.app.test_client().get("/prefix/ui/").status_code == 200  # type: ignore
+    assert (
+        api.router.app.test_client().get("/prefix/ui/openapi.json").status_code == 200  # type: ignore
+    )
