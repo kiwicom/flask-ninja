@@ -5,10 +5,10 @@ from typing import Any, Callable, Optional, Tuple, Union, get_origin
 from docstring_parser import parse as doc_parse
 from flask import jsonify, request
 from pydantic import BaseModel, ValidationError, parse_obj_as, schema_of
-from werkzeug.routing import parse_rule
 
 from .constants import NOT_SET
 from .param import Param, ParamType
+from .parse_rule import parse_rule
 from .security import HttpAuthBase
 
 
