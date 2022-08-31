@@ -17,7 +17,7 @@ jobs:
         python-version: 3.9
     - name: Install Poetry
       run: >-
-        curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python &&
+        curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python - --version 1.1.15 &&
         . $HOME/.poetry/env &&
         poetry config virtualenvs.create false &&
         find flask_ninja -type d | xargs -I {} touch {}/py.typed
