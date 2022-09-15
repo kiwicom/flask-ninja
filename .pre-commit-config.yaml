@@ -52,7 +52,7 @@ repos:
     rev: v2.12.2
     hooks:
       - id: pylint
-        exclude: ^.*(migrations/).*$
+        exclude: ^.*(docs/).*$
         # disabled import-error as may be run out of environment with deps
         args: ["--disable=import-error"]
         additional_dependencies: ['toml', 'pyproject']

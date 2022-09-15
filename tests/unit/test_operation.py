@@ -231,10 +231,11 @@ def test_get_schema():
 
 
 @pytest.mark.parametrize(
-    ("path", "result"),
+    ("path", "arg_type", "result"),
     [
         (
             "/<any:param>",
+            str,
             {
                 "description": "",
                 "in": "path",
@@ -245,6 +246,7 @@ def test_get_schema():
         ),
         (
             "/<int:param>",
+            int,
             {
                 "description": "",
                 "in": "path",
@@ -255,6 +257,7 @@ def test_get_schema():
         ),
         (
             "/<int(min=1,max=2):param>",
+            int,
             {
                 "description": "",
                 "in": "path",
@@ -265,6 +268,7 @@ def test_get_schema():
         ),
         (
             "/<float:param>",
+            float,
             {
                 "description": "",
                 "in": "path",
@@ -275,6 +279,7 @@ def test_get_schema():
         ),
         (
             "/<uuid:param>",
+            str,
             {
                 "description": "",
                 "in": "path",
@@ -285,6 +290,7 @@ def test_get_schema():
         ),
         (
             "/<path:param>",
+            str,
             {
                 "description": "",
                 "in": "path",
@@ -295,6 +301,7 @@ def test_get_schema():
         ),
         (
             "/<string:param>",
+            str,
             {
                 "description": "",
                 "in": "path",
@@ -305,8 +312,8 @@ def test_get_schema():
         ),
     ],
 )
-def test_parse_params(path, result):
-    def func(param: int) -> str:
+def test_parse_params(path, arg_type, result):
+    def func(param: arg_type) -> str:  # type: ignore
         """Some title.
 
         Some long description
@@ -357,7 +364,7 @@ def test_run(test_app):
     with test_app.test_request_context(
         json={"url": "some_url", "description": "foo"}, query_string={"foo": 1}
     ):
-        o = Operation(path="/ping/<int:bar>", method="GET", view_func=view_func)
+        o = Operation(path="/ping/<string:bar>", method="GET", view_func=view_func)
         o.view_func = MagicMock(return_value=5)
         o.run(bar=2)
 
