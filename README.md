@@ -1,5 +1,8 @@
 # Flask Ninja
 
+![build](https://github.com/kiwicom/flask-ninja/workflows/Build%20jobs/badge.svg)
+![python](https://img.shields.io/badge/Python-3.9%20|%203.10-blue)
+
 **Flask Ninja** is a web framework for building APIs with Flask and Python 3.9+ type hints.
 
 Key features:

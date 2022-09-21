@@ -14,7 +14,7 @@ Install the library
 Quick Example
 _____________
 
-So you can see, that it is really simple and powerful.
+As you can see, that it is really simple and powerful.
 
 ``main.py``
 
@@ -70,7 +70,7 @@ You will see the json:
         "sum":3
     }
 
-Now you've just created an API that:
+Now you've created an API that:
 
 * receives an HTTP GET request at ``/compute`` ednpoint
 * takes, validates and type-casts GET parameters ``a`` and ``b``
@@ -80,7 +80,7 @@ Now you've just created an API that:
 Interactive API docs
 ____________________
 
-Now go  to http://127.0.0.1:5000/docs/
+Now go to http://127.0.0.1:5000/docs/
 
 You will see the automatic, interactive API documentation (Provided by the OpenAPI/Swagger UI)
 

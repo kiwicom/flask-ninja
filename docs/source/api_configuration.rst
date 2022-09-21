@@ -1,7 +1,7 @@
 API configuration
 =================
 Flask Ninja provides several helpful tools to deal with the most common API scenarios.
-In order to setup Flask Ninja, you create your Flask instance and then using it, initialize NinjaAPI.
+In order to set up Flask Ninja, you create your Flask instance, which you later use to initialize NinjaAPI.
 
 .. code-block:: python
 
@@ -12,8 +12,7 @@ In order to setup Flask Ninja, you create your Flask instance and then using it,
     app = Flask(__name__)
     api = NinjaAPI(app)
 
-Then adding endpoints is as easy as adding them to normal flask api, you just add them not via the flask instance, but via the flask-ninja instance.
-
+Adding endpoints is as easy as adding them to normal Flask API, but you add them via the flask-ninja instance instead of  the flask instance.
 .. code-block:: python
 
     @api.get("/compute")
@@ -25,9 +24,9 @@ Then adding endpoints is as easy as adding them to normal flask api, you just ad
 Configuration
 -------------
 
-NinjaAPI allows to be configured via the following arguments:
+NinjaAPI allows the configuration via the following arguments:
 
-* **auth** - setup authentication for all endpoints in the API - this can be overriden by setting up different (or no) authentication method in a router or an endpoint.
+* **auth** - set up authentication for all endpoints in the API - this can be overriden by setting up different (or no) authentication method in a router or an endpoint.
 * **title** - title of your application that is displayed in the swagger documentation
 * **description** - description of your application that is displayed in the swagger documentation
 * **version** - version of your application displayed in the swagger documentation

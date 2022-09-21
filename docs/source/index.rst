@@ -2,10 +2,13 @@ Flask-Ninja
 ===================================
 
 **Flask-Ninja** is a simple web API framework based on Flask.
-It uses Pydantic for validation and automatic generation of Openapi documentation. It's heavily inspired by `django-ninja <https://django-ninja.rest-framework.com/>`__ framework.
+It uses Pydantic for validation and automatic generation of OpenAPI documentation. It's heavily inspired by `django-ninja <https://django-ninja.rest-framework.com/>`__ framework.
+For mode details, see the `extended docs <https://flask-ninja.readthedocs.io/en/latest/>`__
 
-The key features are:
-`````````````````````
+Features
+````````
+
+The key features of Flask-Ninja are:
 
 * **Easy:** Designed to be easy to use and intuitive.
 * **Fast to code:** Type hints and automatic docs lets you focus only on business logic.
@@ -16,16 +19,15 @@ The key features are:
 Motivation
 ``````````
 
-There is plenty of similar libraries, but each of them is something missing:
+There is plenty of similar libraries, but each one of them is missing something:
  * `flask-openapi3 <https://luolingchun.github.io/flask-openapi3/>`__ - can't return a pydantic model, only a dict
  * `flask-pydantic <https://pypi.org/project/Flask-Pydantic/>`__ - doesn't generate openapi schema
  * `spectree <https://github.com/0b01001001/spectree>`__ - doesn't support authentication
 
 Additional features
 ```````````````````
-* parses docstrings of the endpoint handler function and use them for documenting the endpoint in the generated documentation.
+* parses docstrings of the endpoint handler function and uses them for documenting the endpoint in the generated documentation.
 * detects response schema from the return type annotation
-
 
 
 Contents

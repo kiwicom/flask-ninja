@@ -5,9 +5,16 @@ Working with Routers
 ````````````````````
 
 Real world applications can almost never fit all logic into a single file.
-As Flask supports splitting your API into smaller modules via Blueprints, in FlaskNinja the module is called Router.
+Flask Ninja comes with an easy way to split your API into multiple modules using Routers.
+A Router is a set of endpoints which can be registered on an application. You can
 
-When you create a new Router instance, you can register your endpoints there as to the Ninja API instance:
+* add an endpoint to a Router
+* register a Router into another Router (using a prefix) - this is helpful if your application has more complex components that doesn't fit into one file - you can build them from even smaller modules
+* register a Router on an Flask Ninja application
+
+**Example:**
+
+Let's define two modules `blogs` and `users`
 
 ``blogs.py``
 
@@ -43,8 +50,7 @@ When you create a new Router instance, you can register your endpoints there as 
         ...
 
 
-Then you combine all endpoints by adding the routers to the API. You can also add a prefix to endpoints of a router,
-so you don't have to write the full path in each endpoint.
+Now we register both routers to the API instance with `blogs` and `users` prefixes.
 
 ``api.py``
 
@@ -64,14 +70,14 @@ so you don't have to write the full path in each endpoint.
     api.add_router(users_api, prefix="/users")
 
 
-Now you can access the following endpoints:
+And we can access the following endpoints:
 
 * ``/blogs/``
 * ``/blogs/new``
 * ``/users/``
 * ``/users/new``
 
-**Note:** You can also add a router to a router, to create a more complex hierarchy of your api:
+**Example 2:** Register a router to a router:
 
 .. code-block:: python
 
@@ -88,10 +94,8 @@ Now you can access the following endpoints:
 Auth
 ````
 
-If you need a special authentication for all endpoints of a router, you can specify it when initializing the router:
+If the endpoints in the router need different authentication than rest of the application, you can set it up by the ``auth`` param. This will set up the authentication for all endpoints and routers attached to this router if they haven't already configured authentication.
 
 .. code-block:: python
 
     api = Router(auth=BearerAuth())
-
-This will overwrite the auth configuration of the API or routers above this router.

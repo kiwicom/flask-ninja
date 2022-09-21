@@ -42,7 +42,7 @@ Each operation has the following optional arguments:
 Responses
 ~~~~~~~~~
 
-By default it is assumed that the endpoint respond with 200 response code and returns the model specified as the return type of the function.
+By default it is assumed that the endpoint responds with 200 response code and returns the model specified as the return type of the function.
 However, if the endpoint success response code is different than 200, you can set it via the response argument:
 
 .. code-block:: python
