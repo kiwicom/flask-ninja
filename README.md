@@ -13,6 +13,8 @@ Key features:
 - Models based: Pydantic models support and automatic (de)serialization of requests/responses.
 - Secure: Natively supports various authentication methods for the requests.
 
+For mode details, see the [Documentation](https://flask-ninja.readthedocs.io/en/latest/)
+
 ## Installation
 
 ```

@@ -3,7 +3,6 @@ Flask-Ninja
 
 **Flask-Ninja** is a simple web API framework based on Flask.
 It uses Pydantic for validation and automatic generation of OpenAPI documentation. It's heavily inspired by `django-ninja <https://django-ninja.rest-framework.com/>`__ framework.
-For mode details, see the `extended docs <https://flask-ninja.readthedocs.io/en/latest/>`__
 
 Features
 ````````
