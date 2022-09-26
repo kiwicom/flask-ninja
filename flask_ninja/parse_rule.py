@@ -1,6 +1,10 @@
-"""Code is taken from werkzeug package before it was deprecated."""
-
+# pylint:disable=pointless-string-statement
 import re
+
+"""
+This code is taken from werkzeug, before it was deprecated without providing an alternative.
+"""
+
 from typing import Iterator, Optional, Tuple
 
 _rule_re = re.compile(
@@ -20,6 +24,13 @@ _rule_re = re.compile(
 
 
 def parse_rule(rule: str) -> Iterator[Tuple[Optional[str], Optional[str], str]]:
+    """Parse a rule and return it as generator.
+
+    Each iteration yields tuples in the form ``(converter, arguments, variable)``. If the converter is
+    `None` it's a static url part, otherwise it's a dynamic one.
+
+    :internal:
+    """
     pos = 0
     end = len(rule)
     do_match = _rule_re.match

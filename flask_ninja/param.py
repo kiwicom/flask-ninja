@@ -83,7 +83,7 @@ class Param:
                 if prop in kwargs:
                     schema[prop] = kwargs[prop]
         elif converter == "default":
-            schema = {"type": "string"}
+            schema = {"type": None}
 
         description = param_docs.get(variable, "")
 

@@ -233,7 +233,7 @@ class Operation:
                     schema=self._obj_schema(param),
                 )
             else:
-                mapper = {str: "string", int: "integer"}
+                mapper = {str: "string", int: "integer", float: "number"}
 
                 query_params[param_name] = Param(
                     name=param_name,
@@ -268,16 +268,27 @@ class Operation:
         path_params = self._parse_path_params(path, param_docs)
         query_params, body_params = self._parse_func_params(param_docs)
 
-        for param in path_params:
+        for param_name, param in path_params.items():
             # We recognized the param as path param, not query param
-            if param in query_params:
-                del query_params[param]
-            elif param in body_params:
+            if param_name in query_params:
+                if param.schema["schema"]["type"] is None:
+                    param.schema["schema"]["type"] = query_params[param_name].schema[
+                        "schema"
+                    ]["type"]
+                elif (
+                    param.schema["schema"]["type"]
+                    != query_params[param_name].schema["schema"]["type"]
+                ):
+                    raise ApiConfigError(
+                        f"Function requires {param_name} argument of type {query_params[param_name].schema['schema']['type']}, got {param.schema['schema']['type']}"
+                    )
+                del query_params[param_name]
+            elif param_name in body_params:
                 raise ApiConfigError(
-                    f"Param of type {type(body_params[param])} can't be path param."
+                    f"Param of type {type(body_params[param_name])} can't be path param."
                 )
             else:
-                raise ApiConfigError(f"Function is missing {param} argument")
+                raise ApiConfigError(f"Function is missing {param_name} argument")
 
         if len(body_params) > 1:
             raise ApiConfigError("Multiple complex objects in function arguments.")
