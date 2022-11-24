@@ -1,6 +1,6 @@
 # pylint:disable=comparison-with-callable
 import json
-from typing import Any, Callable, Optional, Tuple, Union, get_origin
+from typing import Any, Callable, Optional, Tuple, Union, get_origin, Annotated
 
 from docstring_parser import parse as doc_parse
 from flask import jsonify, request
@@ -225,7 +225,7 @@ class Operation:
         for param_name, param in self.view_func.__annotations__.items():
             if param_name == "return":
                 continue
-            if get_origin(param) in (list, dict, tuple) or issubclass(param, BaseModel):
+            if get_origin(param) in (list, dict, tuple, Annotated) or issubclass(param, BaseModel):
                 body_params[param_name] = Param(
                     name=param_name,
                     model=param,
