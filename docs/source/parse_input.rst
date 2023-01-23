@@ -66,7 +66,7 @@ In order to take a variable from headers, use ``Header`` as a default value.
 
     from flask_ninja import Header
 
-    @api.get("/items/<item_id>")
+    @api.get("/items/")
     def compute(item_id: int = Header()) -> Response:
         ...
 
