@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "flask-ninja"
-version = "1.1.5"
+version = "1.1.6"
 description = "Flask Ninja is a web framework for building APIs with Flask and Python 3.9+ type hints."
 readme = "README.md"
 authors = ["Michal Korbela <michal.korbela@kiwi.com>"]

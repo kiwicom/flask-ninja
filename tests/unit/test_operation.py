@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from flask_ninja import Header
 from flask_ninja.api import Server
 from flask_ninja.operation import (
     ApiConfigError,
@@ -198,7 +199,7 @@ def test_get_schema():
                 "description": "Some int",
                 "in": "query",
                 "name": "bid",
-                "required": False,
+                "required": True,
                 "schema": {"type": "integer"},
             }
         ],
@@ -358,18 +359,25 @@ def test_get_openapi_path():
 
 
 def test_run(test_app):
-    def view_func(foo: int, bar: str, server: Server) -> int:
+    def view_func(
+        foo: int, bar: str, server: Server, header_param: int = Header()
+    ) -> int:
         return 1
 
     with test_app.test_request_context(
-        json={"url": "some_url", "description": "foo"}, query_string={"foo": 1}
+        json={"url": "some_url", "description": "foo"},
+        query_string={"foo": 1},
+        headers={"header_param": 10},
     ):
         o = Operation(path="/ping/<string:bar>", method="GET", view_func=view_func)
         o.view_func = MagicMock(return_value=5)
         o.run(bar=2)
 
         o.view_func.assert_called_with(
-            bar=2, foo=1, server=Server(url="some_url", description="foo")
+            bar=2,
+            foo=1,
+            server=Server(url="some_url", description="foo"),
+            header_param=10,
         )
 
 

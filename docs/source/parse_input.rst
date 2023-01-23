@@ -5,6 +5,7 @@ One of the flask-ninja features is the automatic parsing or input. Flask-ninja a
 
 * path arguments
 * query arguments
+* headers
 * request body
 
 and provides them via the arguments of the function.
@@ -55,6 +56,19 @@ In this case, the ``item_id`` is path parameter, because it is mentioned in the 
 .. note::
     If you don't provide the default value for the query parameters, it's also an option, but then you need to always provide the parameters in the query string, otherwise you get an error.
 
+
+Headers
+```````
+
+In order to take a variable from headers, use ``Header`` as a default value.
+
+.. code-block:: python
+
+    from flask_ninja import Header
+
+    @api.get("/items/<item_id>")
+    def compute(item_id: int = Header()) -> Response:
+        ...
 
 
 Request body

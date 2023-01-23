@@ -1,13 +1,16 @@
 # pylint:disable=comparison-with-callable
+import inspect
 import json
-from typing import Annotated, Any, Callable, Optional, Tuple, Union, get_origin
+from typing import Annotated, Any, Callable, Optional, Tuple, Type, Union, get_origin
 
 from docstring_parser import parse as doc_parse
 from flask import jsonify, request
-from pydantic import BaseModel, ValidationError, parse_obj_as, schema_of
+from pydantic import BaseConfig, BaseModel, ValidationError, parse_obj_as, schema_of
+from pydantic.fields import FieldInfo, ModelField, Required, Undefined
+from pydantic.utils import lenient_issubclass
 
 from .constants import NOT_SET
-from .param import Param, ParamType
+from .param import FuncParam, Header, Param, ParamType, Path, Query
 from .parse_rule import parse_rule
 from .security import HttpAuthBase
 
@@ -33,6 +36,51 @@ class SerializationModel(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+def get_param_field(
+    *,
+    param: inspect.Parameter,
+    param_name: str,
+    default_field_info: Type[FuncParam] = FuncParam,
+    force_type: Optional[ParamType] = None,
+    ignore_default: bool = False,
+) -> ModelField:
+    default_value: Any = Undefined
+
+    if not param.default == param.empty and ignore_default is False:
+        default_value = param.default
+    if isinstance(default_value, FieldInfo):
+        field_info = default_value
+        default_value = field_info.default
+        if (
+            isinstance(field_info, FuncParam)
+            and getattr(field_info, "in_", None) is None
+        ):
+            field_info.in_ = default_field_info.in_
+        if force_type:
+            field_info.in_ = force_type  # type: ignore
+    else:
+        field_info = default_field_info(default=default_value)
+    required = True
+    if default_value is Required or ignore_default:
+        required = True
+        default_value = None
+    elif default_value is not Undefined:
+        required = False
+
+    field = ModelField(
+        name=param.name,
+        type_=param.annotation,
+        default=default_value,
+        alias=param_name,
+        required=required,
+        field_info=field_info or FieldInfo(),
+        class_validators={},
+        model_config=BaseConfig,
+    )
+
+    return field
 
 
 class Operation:
@@ -72,6 +120,10 @@ class Operation:
                 if param.param_type == ParamType.QUERY and param_name in request.args:
                     kwargs[param_name] = parse_obj_as(
                         param.model, request.args[param_name]
+                    )
+                elif param.param_type == ParamType.HEADER:
+                    kwargs[param_name] = parse_obj_as(
+                        param.model, request.headers.get(param_name)
                     )
                 # Parse request body
                 elif param.param_type == ParamType.BODY:
@@ -221,38 +273,50 @@ class Operation:
     ) -> Tuple[dict[str, Param], dict[str, Param]]:
         """Parse query and body params from function arguments."""
         body_params = {}
-        query_params = {}
-        for param_name, param in self.view_func.__annotations__.items():
-            if param_name == "return":
-                continue
-            if get_origin(param) in (list, dict, tuple, Annotated) or issubclass(
-                param, BaseModel
-            ):
-                body_params[param_name] = Param(
-                    name=param_name,
-                    model=param,
+        other_params = {}
+        for param in inspect.signature(self.view_func).parameters.values():
+            param_field = get_param_field(
+                param=param, default_field_info=Query, param_name=param.name
+            )
+            base_model = param_field.type_
+
+            if get_origin(param.annotation) in (
+                list,
+                dict,
+                tuple,
+                Annotated,
+            ) or lenient_issubclass(base_model, BaseModel):
+                body_params[param.name] = Param(
+                    name=param.name,
+                    model=param.annotation,
                     param_type=ParamType.BODY,
-                    schema=self._obj_schema(param),
+                    schema=self._obj_schema(param.annotation),
                 )
             else:
+                param_type = (
+                    ParamType.QUERY
+                    if not isinstance(param.default, (Header, Query, Path))
+                    else param.default.in_
+                )
+
                 mapper = {str: "string", int: "integer", float: "number"}
 
-                query_params[param_name] = Param(
-                    name=param_name,
-                    model=param,
-                    param_type=ParamType.QUERY,
+                other_params[param.name] = Param(
+                    name=param.name,
+                    model=base_model,
+                    param_type=param_type,
                     schema={
-                        "name": param_name,
-                        "in": ParamType.QUERY.value,
-                        "required": False,
+                        "name": param.name,
+                        "in": param_type.value,
+                        "required": param_field.required,
                         "schema": {
-                            "type": mapper[param],
+                            "type": mapper[base_model],
                         },
-                        "description": param_docs.get(param_name, ""),
+                        "description": param_docs.get(param.name, ""),
                     },
                 )
 
-        return query_params, body_params
+        return other_params, body_params
 
     def _parse_params(self, path: str) -> dict[str, Param]:
         """Parse path, query and body params from endpoint path and function arguments.
