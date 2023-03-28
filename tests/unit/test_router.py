@@ -1,8 +1,9 @@
 import pytest
 
+from flask_ninja import Query
 from flask_ninja.operation import Callback, Operation
-from flask_ninja.param import Param, ParamType
 from flask_ninja.router import Router
+from flask_ninja.utils import create_model_field
 from tests.conftest import BearerAuth
 
 
@@ -15,7 +16,7 @@ def test_add_route_all_params():
         response_codes={},
     )
 
-    param = Param("some_param", int, ParamType.QUERY)
+    param = create_model_field(name="some_param", type_=int, field_info=Query())
 
     @router.add_route(
         "GET",
@@ -24,7 +25,7 @@ def test_add_route_all_params():
         auth="some_auth",
         summary="some_summary",
         description="some_description",
-        params={"foo_param": param},
+        params=[param],
         callbacks=[callback],
     )
     def sample_method():
@@ -33,11 +34,13 @@ def test_add_route_all_params():
     assert len(router.operations) == 1
     assert router.operations[0].path == "/foo"
     assert router.operations[0].method == "GET"
-    assert router.operations[0].responses == {200: str}
+    assert str(router.operations[0].responses) == str(
+        {200: create_model_field(name="Response 200", type_=str, required=True)}
+    )
     assert router.operations[0].callbacks == [callback]
     assert router.operations[0].summary == "some_summary"
     assert router.operations[0].description == "some_description"
-    assert router.operations[0].params == {"foo_param": param}
+    assert router.operations[0].params == [param]
 
 
 def test_add_route_no_params():
@@ -53,11 +56,13 @@ def test_add_route_no_params():
     assert len(router.operations) == 1
     assert router.operations[0].path == "/foo"
     assert router.operations[0].method == "GET"
-    assert router.operations[0].responses == {200: str}
+    assert str(router.operations[0].responses) == str(
+        {200: create_model_field(name="Response 200", type_=str, required=True)}
+    )
     assert router.operations[0].callbacks is None
     assert router.operations[0].summary == ""
     assert router.operations[0].description == ""
-    assert router.operations[0].params == {}
+    assert router.operations[0].params == []
 
 
 def some_view(foo_param: int) -> str:

@@ -1,24 +1,22 @@
 # pylint: disable=protected-access, unused-argument,disallowed-name
+import json
 from datetime import datetime
-from typing import Union
+from typing import Mapping, Union
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic.schema import get_flat_models_from_fields, get_model_name_map
 
 from flask_ninja import Header
 from flask_ninja.api import Server
-from flask_ninja.operation import (
-    ApiConfigError,
-    Callback,
-    Operation,
-    SerializationModel,
-)
-from flask_ninja.param import Param, ParamType
+from flask_ninja.operation import ApiConfigError, Callback, Operation
+from flask_ninja.param import Query
+from flask_ninja.utils import create_model_field
 from tests.conftest import BearerAuth, BearerAuthUnauthorized
 
 
 def view_func_str() -> str:
-    pass
+    return ""
 
 
 def view_func_pydantic_object(bid: int, server: Server) -> Server:
@@ -33,54 +31,85 @@ def view_func_pydantic_object(bid: int, server: Server) -> Server:
 
 
 def view_func_list() -> list[Server]:
-    pass
+    return []
 
 
 def view_func_list_dict() -> list[dict[str, Server]]:
-    pass
+    return []
 
 
 def view_func_union() -> Union[list[Server], dict[str, Server]]:
-    pass
+    return []
 
 
 def view_func_none_return() -> None:
-    pass
+    return None
 
 
 @pytest.mark.parametrize(
     ("responses", "view_func", "result"),
     [
-        pytest.param(None, view_func_str, {200: str}, id="generate str 200 response"),
+        pytest.param(
+            None,
+            view_func_str,
+            {200: create_model_field(name="Response 200", type_=str, required=True)},
+            id="generate str 200 response",
+        ),
         pytest.param(
             None,
             view_func_pydantic_object,
-            {200: Server},
+            {200: create_model_field(name="Response 200", type_=Server, required=True)},
             id="generate object response",
         ),
         pytest.param(
-            None, view_func_list, {200: list[Server]}, id="generate list response"
+            None,
+            view_func_list,
+            {
+                200: create_model_field(
+                    name="Response 200", type_=list[Server], required=True
+                )
+            },
+            id="generate list response",
         ),
         pytest.param(
             None,
             view_func_list_dict,
-            {200: list[dict[str, Server]]},
+            {
+                200: create_model_field(
+                    name="Response 200", type_=list[dict[str, Server]], required=True
+                )
+            },
             id="generate list dict response",
         ),
         pytest.param(
             {200: list[Server], 202: dict[str, Server]},
             view_func_union,
-            {200: list[Server], 202: dict[str, Server]},
+            {
+                200: create_model_field(
+                    name="Response 200", type_=list[Server], required=True
+                ),
+                202: create_model_field(
+                    name="Response 202", type_=Mapping[str, Server], required=True
+                ),
+            },
             id="Multiple responses - Union return type",
         ),
         pytest.param(
-            Server, view_func_pydantic_object, {200: Server}, id="Specified response"
+            Server,
+            view_func_pydantic_object,
+            {200: create_model_field(name="Response 200", type_=Server, required=True)},
+            id="Specified response",
         ),
-        pytest.param({"200": str}, view_func_str, {200: str}, id="string return codes"),
+        pytest.param(
+            {"200": str},
+            view_func_str,
+            {200: create_model_field(name="Response 200", type_=str, required=True)},
+            id="string return codes",
+        ),
     ],
 )
 def test_sanitize_responses_ok(responses, view_func, result):
-    assert Operation._sanitize_responses(responses, view_func) == result
+    assert str(Operation._sanitize_responses(responses, view_func)) == str(result)
 
 
 @pytest.mark.parametrize(
@@ -117,24 +146,6 @@ def test_serialize(obj, result):
     assert Operation.serialize(obj) == result
 
 
-def test_obj_schema():
-    operation = Operation("/ping", "GET", view_func_str)
-    assert operation._obj_schema(SerializationModel) == {
-        "$ref": "#/components/schemas/SerializationModel",
-        "title": "ParsingModel[SerializationModel]",
-    }
-    assert "SerializationModel" in operation.definitions
-    assert len(operation.definitions) == 1
-
-    operation.definitions = {}
-    # serialize the same object second time, pydantic should not return the same definition again
-    assert operation._obj_schema(SerializationModel) == {
-        "$ref": "#/components/schemas/SerializationModel",
-        "title": "ParsingModel[SerializationModel]",
-    }
-    assert not operation.definitions
-
-
 def test_get_schema():
     operation = Operation(
         "/ping",
@@ -146,11 +157,10 @@ def test_get_schema():
                 url="someurl",
                 method="GET",
                 params=[
-                    Param(
+                    create_model_field(
                         name="get_param",
-                        model=int,
-                        param_type=ParamType.QUERY,
-                        description="Some callback param description",
+                        type_=int,
+                        field_info=Query(description="Some callback param description"),
                     ),
                 ],
                 request_body=Server,
@@ -160,170 +170,117 @@ def test_get_schema():
         auth=BearerAuth(),
     )
 
-    assert operation.get_schema() == {
-        "callbacks": {
-            "callback": {
-                "someurl": {
-                    "get": {
-                        "parameters": [
-                            {
-                                "description": "Some callback param description",
-                                "in": "query",
-                                "name": "get_param",
-                                "required": False,
-                                "schema": {"type": "integer"},
-                            }
-                        ],
-                        "requestBody": {
-                            "required": True,
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "$ref": "#/components/schemas/Server",
-                                        "title": "ParsingModel[Server]",
-                                    }
-                                }
-                            },
-                        },
-                        "responses": {
-                            "200": {"description": "Success"},
-                            "500": {"description": "Error"},
-                        },
-                    }
-                }
-            }
-        },
-        "description": "Some long description",
-        "parameters": [
-            {
-                "description": "Some int",
-                "in": "query",
-                "name": "bid",
-                "required": True,
-                "schema": {"type": "integer"},
-            }
-        ],
-        "requestBody": {
-            "content": {
-                "application/json": {
+    models = operation.get_models()
+    flat_models = get_flat_models_from_fields(models, known_models=set())
+    model_name_map = get_model_name_map(flat_models)
+
+    assert operation.get_schema(model_name_map=model_name_map).json(
+        by_alias=True, exclude_none=True
+    ) == json.dumps(
+        {
+            "summary": "Some title.",
+            "description": "Some long description",
+            "parameters": [
+                {
+                    "description": "Some int",
+                    "required": True,
                     "schema": {
-                        "$ref": "#/components/schemas/Server",
-                        "title": "ParsingModel[Server]",
-                    }
+                        "title": "Bid",
+                        "type": "integer",
+                        "description": "Some int",
+                    },
+                    "name": "bid",
+                    "in": "query",
                 }
-            }
-        },
-        "responses": {
-            "200": {
+            ],
+            "requestBody": {
+                "description": "",
                 "content": {
                     "application/json": {
                         "schema": {
-                            "$ref": "#/components/schemas/Server",
-                            "title": "ParsingModel[Server]",
+                            "title": "Server",
+                            "allOf": [{"$ref": "#/components/schemas/Server"}],
+                            "description": "Some server",
                         }
                     }
                 },
-                "description": "",
-            }
-        },
-        "security": [{"bearerTokenAuth": []}],
-        "summary": "Some title.",
-    }
+                "required": True,
+            },
+            "responses": {
+                "200": {
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/Server"}
+                        }
+                    },
+                }
+            },
+            "callbacks": {
+                "callback": {
+                    "someurl": {
+                        "get": {
+                            "parameters": [
+                                {
+                                    "description": "Some callback param description",
+                                    "required": True,
+                                    "schema": {
+                                        "title": "Get Param",
+                                        "type": "integer",
+                                        "description": "Some callback param description",
+                                    },
+                                    "name": "get_param",
+                                    "in": "query",
+                                }
+                            ],
+                            "requestBody": {
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "$ref": "#/components/schemas/Server"
+                                        }
+                                    }
+                                },
+                                "required": True,
+                            },
+                            "responses": {
+                                "200": {"description": "Success"},
+                                "500": {"description": "Error"},
+                            },
+                        }
+                    }
+                }
+            },
+            "security": [{"bearerTokenAuth": []}],
+        }
+    )
 
 
 @pytest.mark.parametrize(
-    ("path", "arg_type", "result"),
+    ("path", "result"),
     [
-        (
-            "/<any:param>",
-            str,
-            {
-                "description": "",
-                "in": "path",
-                "name": "param",
-                "required": True,
-                "schema": {"enum": [], "type": "string"},
-            },
-        ),
-        (
-            "/<int:param>",
-            int,
-            {
-                "description": "",
-                "in": "path",
-                "name": "param",
-                "required": True,
-                "schema": {"type": "integer"},
-            },
-        ),
-        (
-            "/<int(min=1,max=2):param>",
-            int,
-            {
-                "description": "",
-                "in": "path",
-                "name": "param",
-                "required": True,
-                "schema": {"maximum": 2, "minimum": 1, "type": "integer"},
-            },
-        ),
-        (
-            "/<float:param>",
-            float,
-            {
-                "description": "",
-                "in": "path",
-                "name": "param",
-                "required": True,
-                "schema": {"format": "float", "type": "number"},
-            },
-        ),
-        (
-            "/<uuid:param>",
-            str,
-            {
-                "description": "",
-                "in": "path",
-                "name": "param",
-                "required": True,
-                "schema": {"format": "uuid", "type": "string"},
-            },
-        ),
-        (
-            "/<path:param>",
-            str,
-            {
-                "description": "",
-                "in": "path",
-                "name": "param",
-                "required": True,
-                "schema": {"format": "path", "type": "string"},
-            },
-        ),
-        (
-            "/<string:param>",
-            str,
-            {
-                "description": "",
-                "in": "path",
-                "name": "param",
-                "required": True,
-                "schema": {"type": "string"},
-            },
-        ),
+        ("/<any:param>", ["param"]),
+        ("/<int:param>", ["param"]),
+        ("/<int(min=1,max=2):param>", ["param"]),
+        ("/<float:param>", ["param"]),
+        ("/<uuid:param>", ["param"]),
+        ("/<path:param>", ["param"]),
+        ("/<string:param>", ["param"]),
+        ("/<string:param>/<int:param1>", ["param", "param1"]),
     ],
 )
-def test_parse_params(path, arg_type, result):
-    def func(param: arg_type) -> str:  # type: ignore
+def test_parse_params(path, result):
+    def func(param: int, param1: int) -> str:
         """Some title.
 
         Some long description
 
         :param int param: desc param1
         """
+        return ""
 
     o = Operation(path=path, method="GET", view_func=func)
-    assert o._parse_path_params(path, {})["param"].schema == result
+    assert o._parse_path_params(path) == result
 
 
 def test_parse_multiple_invalid():
@@ -367,7 +324,7 @@ def test_run(test_app):
     with test_app.test_request_context(
         json={"url": "some_url", "description": "foo"},
         query_string={"foo": 1},
-        headers={"header_param": 10},
+        headers={"header-param": 10},
     ):
         o = Operation(path="/ping/<string:bar>", method="GET", view_func=view_func)
         o.view_func = MagicMock(return_value=5)
@@ -379,6 +336,17 @@ def test_run(test_app):
             server=Server(url="some_url", description="foo"),
             header_param=10,
         )
+
+
+def test_run_generics(test_app):
+    def view_func(items: list[int]) -> list[int]:
+        return items
+
+    with test_app.test_request_context(
+        json=[1, 2, 3],
+    ):
+        o = Operation(path="/ping/", method="POST", view_func=view_func)
+        assert o.run()[0].json == [1, 2, 3]
 
 
 def test_run_wrong_returned_type(test_app):

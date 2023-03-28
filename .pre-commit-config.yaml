@@ -35,7 +35,7 @@ repos:
         language_version: system
 
   - repo: https://github.com/PyCQA/isort
-    rev: 5.10.1
+    rev: 5.12.0
     hooks:
       - id: isort
         # extra dependencies for config in pyproject.toml
@@ -65,7 +65,7 @@ repos:
         additional_dependencies: [ 'toml', 'pyproject' ]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v0.931
+    rev: v1.1.1
     hooks:
       - id: mypy
         args: []
