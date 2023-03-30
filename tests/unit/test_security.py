@@ -1,5 +1,11 @@
-import pytest
+from typing import Any, Optional
 
+import pytest
+from flask import Flask
+from pydantic import BaseModel
+
+from flask_ninja import NinjaAPI
+from flask_ninja.models import HTTPBearer, SecuritySchemeType
 from flask_ninja.security import HttpBearer
 
 
@@ -33,5 +39,33 @@ def test_bearer_auth(test_app, headers, result):
 
 def test_schema():
     assert BearerAuth().schema() == {
-        "bearerTokenAuth": {"scheme": "bearer", "type": "http"}
+        "bearerTokenAuth": HTTPBearer(type=SecuritySchemeType.http, scheme="bearer")
     }
+
+
+@pytest.mark.parametrize(
+    ("headers", "status_code"),
+    [
+        pytest.param({}, 401, id="Missing header"),
+        pytest.param({"Authorization": "Bearer 123"}, 200, id="Correct token"),
+        pytest.param({"Authorization": "123"}, 401, id="Correct token, wrong format"),
+        pytest.param({"Authorization": "Bearer bla"}, 401, id="Wrong token"),
+    ],
+)
+def test_authentication(headers, status_code):
+    class MyBearer(HttpBearer):
+        def authenticate(self, token: str) -> Optional[Any]:
+            return token == "123" or None
+
+    class Response(BaseModel):
+        status: str
+
+    app = Flask(__name__)
+    api = NinjaAPI(app, auth=MyBearer())
+
+    @api.get("/compute")
+    def compute() -> Response:
+        return Response(status="success")
+
+    with app.test_client() as client:
+        assert client.get("/compute", headers=headers).status_code == status_code

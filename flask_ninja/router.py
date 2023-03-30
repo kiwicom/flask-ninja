@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from flask import Flask
+from pydantic.fields import ModelField
 
 from flask_ninja.constants import NOT_SET
 from flask_ninja.operation import Callback, Operation
-from flask_ninja.param import Param
 
 
 class Router:
@@ -43,7 +43,7 @@ class Router:
         auth: Any = NOT_SET,
         summary: str = "",
         description: str = "",
-        params: Optional[dict[str, Param]] = None,
+        params: Optional[list[ModelField]] = None,
         callbacks: Optional[list[Callback]] = None,
     ) -> Callable:
         def decorator(func: Callable) -> Callable:

@@ -3,6 +3,8 @@ from typing import Any, Optional
 
 from flask import request
 
+from flask_ninja.models import HTTPBearer, SecurityBase
+
 
 class HttpAuthBase(abc.ABC):
     openapi_type: str = "http"
@@ -13,7 +15,7 @@ class HttpAuthBase(abc.ABC):
         pass  # pragma: no cover
 
     @abc.abstractmethod
-    def schema(self) -> dict:
+    def schema(self) -> dict[str, SecurityBase]:
         pass
 
 
@@ -39,7 +41,5 @@ class HttpBearer(HttpAuthBase, abc.ABC):
     def authenticate(self, token: str) -> Optional[Any]:
         pass  # pragma: no cover
 
-    def schema(self) -> dict:
-        return {
-            self.schema_name: {"scheme": self.openapi_scheme, "type": self.openapi_type}
-        }
+    def schema(self) -> dict[str, SecurityBase]:
+        return {self.schema_name: HTTPBearer()}

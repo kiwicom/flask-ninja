@@ -1,4 +1,5 @@
 # pylint: disable=dangerous-default-value
+from enum import Enum
 from typing import Any
 
 
@@ -14,3 +15,17 @@ class NOT_SET:
 
 
 NOT_SET: Any = NOT_SET()  # type:ignore
+
+REF_PREFIX = "#/components/schemas/"
+
+
+class ParamType(Enum):
+    QUERY = "query"
+    HEADER = "header"
+    PATH = "path"
+    COOKIE = "cookie"
+    BODY = "body"
+
+
+class ApiConfigError(Exception):
+    """There is a mistake in the API configuration."""

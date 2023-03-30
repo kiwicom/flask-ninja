@@ -1,34 +1,35 @@
 # pylint:disable=comparison-with-callable
 import inspect
 import json
-from typing import Annotated, Any, Callable, Optional, Tuple, Type, Union, get_origin
+import re
+from collections import defaultdict
+from enum import Enum
+from typing import Any, Callable, Dict, Optional, Type, Union, cast, get_origin
 
 from docstring_parser import parse as doc_parse
 from flask import jsonify, request
-from pydantic import BaseConfig, BaseModel, ValidationError, parse_obj_as, schema_of
-from pydantic.fields import FieldInfo, ModelField, Required, Undefined
-from pydantic.utils import lenient_issubclass
+from pydantic import BaseModel, ValidationError, parse_obj_as
+from pydantic.fields import ModelField, Undefined
+from pydantic.schema import field_schema
 
-from .constants import NOT_SET
-from .param import FuncParam, Header, Param, ParamType, Path, Query
+from .constants import NOT_SET, REF_PREFIX, ApiConfigError, ParamType
+from .models import MediaType
+from .models import Operation as OAPIOperation
+from .models import (
+    Parameter,
+    ParameterInType,
+    PathItem,
+    Reference,
+    RequestBody,
+    Response,
+    Schema,
+)
+from .param import FuncParam
 from .parse_rule import parse_rule
 from .security import HttpAuthBase
+from .utils import create_model_field, get_param_model_field
 
-
-class ApiConfigError(Exception):
-    """There is a mistake in the API configuration."""
-
-
-class Callback(BaseModel):
-    name: str
-    url: str
-    method: str
-    request_body: Optional[Any]
-    params: Optional[list[Param]]
-    response_codes: dict[int, str]
-
-    class Config:
-        arbitrary_types_allowed = True
+ModelNameMapType = dict[Union[Type[BaseModel], Type[Enum]], str]
 
 
 class SerializationModel(BaseModel):
@@ -38,49 +39,16 @@ class SerializationModel(BaseModel):
         arbitrary_types_allowed = True
 
 
-def get_param_field(
-    *,
-    param: inspect.Parameter,
-    param_name: str,
-    default_field_info: Type[FuncParam] = FuncParam,
-    force_type: Optional[ParamType] = None,
-    ignore_default: bool = False,
-) -> ModelField:
-    default_value: Any = Undefined
+class Callback(BaseModel):
+    name: str
+    url: str
+    method: str
+    request_body: Optional[Any]
+    params: Optional[list[ModelField]]
+    response_codes: dict[int, str]
 
-    if not param.default == param.empty and ignore_default is False:
-        default_value = param.default
-    if isinstance(default_value, FieldInfo):
-        field_info = default_value
-        default_value = field_info.default
-        if (
-            isinstance(field_info, FuncParam)
-            and getattr(field_info, "in_", None) is None
-        ):
-            field_info.in_ = default_field_info.in_
-        if force_type:
-            field_info.in_ = force_type  # type: ignore
-    else:
-        field_info = default_field_info(default=default_value)
-    required = True
-    if default_value is Required or ignore_default:
-        required = True
-        default_value = None
-    elif default_value is not Undefined:
-        required = False
-
-    field = ModelField(
-        name=param.name,
-        type_=param.annotation,
-        default=default_value,
-        alias=param_name,
-        required=required,
-        field_info=field_info or FieldInfo(),
-        class_validators={},
-        model_config=BaseConfig,
-    )
-
-    return field
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class Operation:
@@ -91,11 +59,11 @@ class Operation:
         path: str,
         method: str,
         view_func: Callable,
-        responses: Optional[Any] = None,
+        responses: Optional[Dict[int, BaseModel]] = None,
         callbacks: Optional[list[Callback]] = None,
         summary: str = "",
         description: str = "",
-        params: Optional[dict[str, Param]] = None,
+        params: Optional[list[ModelField]] = None,
         auth: Any = NOT_SET,
     ):
         self.path = path
@@ -115,19 +83,20 @@ class Operation:
             return jsonify("Unauthorized"), 401
 
         try:
-            for param_name, param in self.params.items():
+            for param in self.params:
                 # Parse query params
-                if param.param_type == ParamType.QUERY and param_name in request.args:
-                    kwargs[param_name] = parse_obj_as(
-                        param.model, request.args[param_name]
+                field_info = cast(FuncParam, param.field_info)
+                if field_info.in_ == ParamType.QUERY and param.name in request.args:
+                    kwargs[param.name] = parse_obj_as(
+                        param.type_, request.args[param.alias]
                     )
-                elif param.param_type == ParamType.HEADER:
-                    kwargs[param_name] = parse_obj_as(
-                        param.model, request.headers.get(param_name)
+                elif field_info.in_ == ParamType.HEADER:
+                    kwargs[param.name] = parse_obj_as(
+                        param.type_, request.headers.get(param.alias)
                     )
                 # Parse request body
-                elif param.param_type == ParamType.BODY:
-                    kwargs[param_name] = parse_obj_as(param.model, request.json)
+                elif field_info.in_ == ParamType.BODY:
+                    kwargs[param.name] = parse_obj_as(param.outer_type_, request.json)
         except ValidationError as validation_error:
             return validation_error.json(), 400
 
@@ -140,42 +109,53 @@ class Operation:
             # e.g. list[str], dict[str, Response], etc, we can't use isinstance and
             # at first need to get the unspecified generic type - e.g. list, dict, etc
             # TODO match also the inner types of generics - but that's a corner case
-            if isinstance(resp, get_origin(model) or model):
+            if isinstance(resp, get_origin(model.outer_type_) or model.outer_type_):
                 return jsonify(self.serialize(resp)), code
 
         raise ApiConfigError(f"No response schema matches returned type {type(resp)}")
 
     @staticmethod
-    def _sanitize_responses(responses: Any, view_func: Callable) -> dict[int, Any]:
+    def _sanitize_responses(
+        responses: Any, view_func: Callable
+    ) -> dict[int, ModelField]:
         func_return_type = view_func.__annotations__.get("return")
 
         # Return code not specified, setting it to 200
         if not isinstance(responses, dict):
-            responses = {200: responses} if responses else {}
+            responses = (
+                {200: create_model_field("Response 200", responses)}
+                if responses
+                else {}
+            )
         else:
             # convert all response codes to ints
-            responses = {int(k): v for k, v in responses.items()}
+            responses = {
+                int(k): create_model_field(f"Response {k}", v)
+                for k, v in responses.items()
+            }
 
         # If responses weren't specified, try to generate it from return type
         if not responses:
             # It can't be an Union
             if func_return_type is None or get_origin(func_return_type) == Union:
                 raise ApiConfigError("Return type not specified.")
-            responses[200] = func_return_type
+            responses[200] = create_model_field("Response 200", func_return_type)
 
         # Check if for each returned type there is implicitly or explicitly defined response model and code
         if func_return_type:
             if get_origin(func_return_type) == Union:
                 for ret_type in func_return_type.__args__:
-                    if ret_type not in responses.values():
+                    if not any(
+                        resp.outer_type_ != ret_type for resp in responses.values()
+                    ):
                         raise ApiConfigError(
                             f"Return type {ret_type} http code must be specified explicitly."
                         )
 
             # If we specified different return type as we specified as response
-            elif 200 in responses and responses[200] != func_return_type:
+            elif 200 in responses and responses[200].outer_type_ != func_return_type:
                 raise ApiConfigError(
-                    f"Return type of the function {type(func_return_type)} does not match response type {type(responses[200])}"
+                    f"Return type of the function {type(func_return_type)} does not match response type {type(responses[200].outer_type_)}"
                 )
         return responses
 
@@ -187,179 +167,220 @@ class Operation:
         """
         return json.loads(SerializationModel(data=resp).json())["data"]
 
-    def _obj_schema(self, obj: Any) -> dict:
-        """Generate schema for a model using pydantic and store definitions."""
-        schema = schema_of(obj, ref_template="#/components/schemas/{model}")
-        self.definitions.update(schema.get("definitions", {}))
+    def get_callback_schema(
+        self, cb: Callback, model_name_map: ModelNameMapType
+    ) -> dict[str, PathItem]:
+        """Generate schema for a callback.
 
-        if "definitions" in schema:
-            del schema["definitions"]
+        Currently, a lot of code is duplicated with endpoints schema.
+        In the near future, I plan to unify it. It will also make easier
+        to declare callbacks.
+        """
 
-        return schema
-
-    def get_callback_schema(self, cb: Callback) -> dict:
-        schema: dict = {}
         if cb.request_body:
-            schema["requestBody"] = {
-                "required": True,
-                "content": {
-                    "application/json": {"schema": self._obj_schema(cb.request_body)}
+            request_body, _, _ = field_schema(
+                create_model_field("Callback", cb.request_body),
+                model_name_map=model_name_map,
+                ref_prefix=REF_PREFIX,
+            )
+        else:
+            request_body = None
+
+        parameters: list[Union[Parameter, Reference]] = []
+        for param in cb.params or []:
+            field_info = param.field_info
+            field_info = cast(FuncParam, field_info)
+            if not field_info.include_in_schema:
+                continue
+            if field_info.in_ == ParamType.BODY:
+                continue
+            parameter = Parameter(
+                name=param.alias,
+                in_=ParameterInType(field_info.in_.value),
+                # Undefined type is tricky, because it can't be serialized
+                required=None if param.required == Undefined else bool(param.required),
+                schema_=Schema.parse_obj(
+                    field_schema(
+                        param, model_name_map=model_name_map, ref_prefix=REF_PREFIX
+                    )[0]
+                ),
+                description=field_info.description,
+                examples=field_info.examples,
+                example=field_info.example if field_info.example != Undefined else None,
+                deprecated=field_info.deprecated,
+            )
+            parameters.append(parameter)
+
+        schema = OAPIOperation(
+            requestBody=RequestBody(
+                content={
+                    "application/json": MediaType(schema_=request_body)  # type:ignore
                 },
-            }
-        if cb.params:
-            schema["parameters"] = [param.schema for param in cb.params]
-
-        if cb.response_codes:
-            schema["responses"] = {
-                str(code): {"description": description}
+                required=True,
+            )
+            if request_body
+            else None,
+            parameters=parameters or None,
+            responses={
+                str(code): Response(description=description)
                 for code, description in cb.response_codes.items()
-            }
+            },
+        )
 
-        return {cb.url: {cb.method.lower(): schema}}
+        return {cb.url: PathItem.parse_obj({cb.method.lower(): schema})}
 
-    def get_schema(self) -> dict:
-        """Generate schema for the operation."""
+    def get_openapi_parameters(
+        self,
+        model_name_map: ModelNameMapType,
+    ) -> list[Parameter]:
+        """Create OpenAPI schema for parameters of this operation."""
+        parameters = []
+        for param in self.params:
+            field_info = cast(FuncParam, param.field_info)
+
+            if not field_info.include_in_schema:
+                continue
+            if field_info.in_ == ParamType.BODY:
+                continue
+            parameter = Parameter(
+                name=param.alias,
+                in_=ParameterInType(field_info.in_.value),
+                required=None if param.required == Undefined else bool(param.required),
+                schema_=Schema.parse_obj(
+                    field_schema(
+                        param, model_name_map=model_name_map, ref_prefix=REF_PREFIX
+                    )[0]
+                ),
+                description=field_info.description,
+                examples=field_info.examples,
+                example=field_info.example if field_info.example != Undefined else None,
+                deprecated=field_info.deprecated,
+            )
+            parameters.append(Parameter.parse_obj(parameter))
+
+        return parameters
+
+    def get_openapi_request_body(
+        self, model_name_map: ModelNameMapType
+    ) -> Optional[RequestBody]:
+        """Create OpenAPI schema for request body of this operation.
+
+        Note: There can be at most one request body.
+        """
+        for param in self.params:
+            field_info = cast(FuncParam, param.field_info)
+            if field_info.in_ == ParamType.BODY:
+                request_body, _, _ = field_schema(
+                    param, model_name_map=model_name_map, ref_prefix=REF_PREFIX
+                )
+
+                return RequestBody(
+                    content={
+                        "application/json": MediaType(
+                            schema_=Schema.parse_obj(request_body),
+                        )
+                    },
+                    description="",
+                    required=True,
+                )
+        return None
+
+    def get_schema(self, model_name_map: ModelNameMapType) -> OAPIOperation:
+        """Create OpenAPI schema for this operation."""
         doc = doc_parse(self.view_func.__doc__ or "")
-
-        operation_schema: dict[str, Any] = {
-            "summary": doc.short_description or self.summary,
-            "description": doc.long_description or self.description,
-            "responses": {},
-        }
+        responses: Dict[str, Response] = {}
 
         for code, response in self.responses.items():
-            schema = self._obj_schema(response)
-            operation_schema["responses"][str(code)] = {
-                "content": {"application/json": {"schema": schema}},
-                "description": "",
-            }
+            response_schema, _, _ = field_schema(
+                response, model_name_map=model_name_map, ref_prefix=REF_PREFIX
+            )
 
-        parameters = []
+            responses[str(code)] = Response(
+                content={
+                    "application/json": MediaType(
+                        schema_=Schema.parse_obj(response_schema)
+                    )
+                },
+                description="",
+            )
 
-        for param in self.params.values():
-            if param.param_type == ParamType.BODY:
-                operation_schema["requestBody"] = {
-                    "content": {"application/json": {"schema": param.schema}}
-                }
-            else:
-                parameters.append(param.schema)
-
-        if self.auth:
-            operation_schema["security"] = [{self.auth.schema_name: []}]
-
-        if parameters:
-            operation_schema["parameters"] = parameters
-
-        if self.callbacks:
-            callback_schema = {}
-            for callback in self.callbacks:
-                callback_schema[callback.name] = self.get_callback_schema(callback)
-            operation_schema["callbacks"] = callback_schema
-
-        return operation_schema
-
-    def _parse_path_params(
-        self, path: str, param_docs: dict[str, str]
-    ) -> dict[str, Param]:
-        """Parse path params from endpoint path."""
-        return {
-            variable: Param.from_path(converter, arguments, variable, param_docs)
-            for converter, arguments, variable in parse_rule(path)
-            if converter is not None
+        callbacks = {
+            cb.name: self.get_callback_schema(cb, model_name_map=model_name_map)
+            for cb in (self.callbacks or [])
         }
 
-    def _parse_func_params(
-        self, param_docs: dict[str, str]
-    ) -> Tuple[dict[str, Param], dict[str, Param]]:
-        """Parse query and body params from function arguments."""
-        body_params = {}
-        other_params = {}
-        for param in inspect.signature(self.view_func).parameters.values():
-            param_field = get_param_field(
-                param=param, default_field_info=Query, param_name=param.name
-            )
-            base_model = param_field.type_
+        return OAPIOperation(
+            summary=doc.short_description or self.summary,
+            description=doc.long_description or self.description,
+            responses=responses,
+            parameters=self.get_openapi_parameters(model_name_map=model_name_map)
+            or None,  # type:ignore
+            requestBody=self.get_openapi_request_body(model_name_map=model_name_map),
+            security=[{self.auth.schema_name: []}] if self.auth else None,
+            callbacks=callbacks or None,
+        )
 
-            if get_origin(param.annotation) in (
-                list,
-                dict,
-                tuple,
-                Annotated,
-            ) or lenient_issubclass(base_model, BaseModel):
-                body_params[param.name] = Param(
-                    name=param.name,
-                    model=param.annotation,
-                    param_type=ParamType.BODY,
-                    schema=self._obj_schema(param.annotation),
-                )
-            else:
-                param_type = (
-                    ParamType.QUERY
-                    if not isinstance(param.default, (Header, Query, Path))
-                    else param.default.in_
-                )
+    def _parse_path_params(self, path: str) -> list[str]:
+        """Extract names of path parameters of the operation."""
+        return re.findall(r"(\w+)>", path)
 
-                mapper = {str: "string", int: "integer", float: "number"}
+    def _parse_params(self, path: str) -> list[ModelField]:
+        """Parse parameters of this operation.
 
-                other_params[param.name] = Param(
-                    name=param.name,
-                    model=base_model,
-                    param_type=param_type,
-                    schema={
-                        "name": param.name,
-                        "in": param_type.value,
-                        "required": param_field.required,
-                        "schema": {
-                            "type": mapper[base_model],
-                        },
-                        "description": param_docs.get(param.name, ""),
-                    },
-                )
-
-        return other_params, body_params
-
-    def _parse_params(self, path: str) -> dict[str, Param]:
-        """Parse path, query and body params from endpoint path and function arguments.
-
-        The idea is:
-        - if a param is in endpoint path string - it is a path param
-        - if it's not and it's a complex type - list, dict, object - it is body param
-        - otherwise it is query param
+        We take all arguments of the operation function,
+        and for each of them determine a location from where it should be taken
+        e.g. path, query, request body until it's not set explicitly.
         """
+        path_param_names = self._parse_path_params(path)
+
         param_docs = {
             param.arg_name: param.description or ""
             for param in doc_parse(self.view_func.__doc__ or "").params
         }
 
-        path_params = self._parse_path_params(path, param_docs)
-        query_params, body_params = self._parse_func_params(param_docs)
+        fields = []
 
-        for param_name, param in path_params.items():
-            # We recognized the param as path param, not query param
-            if param_name in query_params:
-                if param.schema["schema"]["type"] is None:
-                    param.schema["schema"]["type"] = query_params[param_name].schema[
-                        "schema"
-                    ]["type"]
-                elif (
-                    param.schema["schema"]["type"]
-                    != query_params[param_name].schema["schema"]["type"]
-                ):
-                    raise ApiConfigError(
-                        f"Function requires {param_name} argument of type {query_params[param_name].schema['schema']['type']}, got {param.schema['schema']['type']}"
-                    )
-                del query_params[param_name]
-            elif param_name in body_params:
-                raise ApiConfigError(
-                    f"Param of type {type(body_params[param_name])} can't be path param."
-                )
-            else:
-                raise ApiConfigError(f"Function is missing {param_name} argument")
+        # Additional attributes for a parameter are set via the default value
+        # we retrieve the default value using inspect, and we convert it
+        # to a ModelField get_param_model_field function
+        for param in inspect.signature(self.view_func).parameters.values():
+            model_field = get_param_model_field(
+                param=param,
+                force_type=ParamType.PATH if param.name in path_param_names else None,
+            )
+            if param.name in param_docs and not model_field.field_info.description:
+                model_field.field_info.description = param_docs[param.name]
 
-        if len(body_params) > 1:
-            raise ApiConfigError("Multiple complex objects in function arguments.")
+            fields.append(model_field)
 
-        return path_params | query_params | body_params
+        # After the parameters are parsed, we do some checks to ensure consistency of the API
+        field_types = defaultdict(list)
+        for field in fields:
+            field_types[field.field_info.in_].append(field.name)  # type:ignore
+
+        if len(field_types[ParamType.BODY]) > 1:
+            raise ApiConfigError("Multiple request body arguments.")
+
+        for path_param in path_param_names:
+            if path_param not in field_types[ParamType.PATH]:
+                raise ApiConfigError(f"API handler misses {path_param} argument.")
+
+        return fields
+
+    def get_models(self) -> list[ModelField]:
+        """Collects all models used in this operation.
+
+        This is needed to get definitions of all models for OpenAPI.
+        """
+        return (
+            self.params
+            + list(self.responses.values())
+            + list(
+                create_model_field(cb.name, cb.request_body)
+                for cb in (self.callbacks or [])
+                if cb.request_body
+            )
+        )
 
     def get_openapi_path(self) -> str:
         """Convert flask endpoint path into openapi path."""
