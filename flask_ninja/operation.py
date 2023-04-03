@@ -110,6 +110,10 @@ class Operation:
             # at first need to get the unspecified generic type - e.g. list, dict, etc
             # TODO match also the inner types of generics - but that's a corner case
             if isinstance(resp, get_origin(model.outer_type_) or model.outer_type_):
+                # hotfix: if the resp is str we shouldn't use jsonify as it
+                # changes the response adding additional characters.
+                if isinstance(resp, str):
+                    return resp, code
                 return jsonify(self.serialize(resp)), code
 
         raise ApiConfigError(f"No response schema matches returned type {type(resp)}")
