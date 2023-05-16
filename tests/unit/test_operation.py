@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 
 import pytest
 from pydantic.schema import get_flat_models_from_fields, get_model_name_map
+from werkzeug.datastructures import MultiDict
 
-from flask_ninja import Header
+from flask_ninja import Header, Query
 from flask_ninja.api import Server
 from flask_ninja.operation import ApiConfigError, Callback, Operation
-from flask_ninja.param import Query
 from flask_ninja.utils import create_model_field
 from tests.conftest import BearerAuth, BearerAuthUnauthorized
 
@@ -335,6 +335,23 @@ def test_run(test_app):
             foo=1,
             server=Server(url="some_url", description="foo"),
             header_param=10,
+        )
+
+
+def test_run_query_list(test_app):
+    def view_func(foo: list[int] = Query(), bar: list[str] = Query()) -> int:
+        return 1
+
+    with test_app.test_request_context(
+        query_string=MultiDict([("foo", 1), ("foo", 2), ("bar", "a"), ("bar", "b")]),
+    ):
+        o = Operation(path="/ping", method="GET", view_func=view_func)
+        o.view_func = MagicMock(return_value=5)
+        o.run()
+
+        o.view_func.assert_called_with(
+            bar=["a", "b"],
+            foo=[1, 2],
         )
 
 
