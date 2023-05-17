@@ -6,7 +6,13 @@ from typing import Any, Dict, Optional, Set, Type, Union
 from pydantic import BaseConfig, BaseModel
 from pydantic.class_validators import Validator
 from pydantic.fields import (
+    SHAPE_FROZENSET,
+    SHAPE_LIST,
+    SHAPE_SEQUENCE,
+    SHAPE_SET,
     SHAPE_SINGLETON,
+    SHAPE_TUPLE,
+    SHAPE_TUPLE_ELLIPSIS,
     FieldInfo,
     ModelField,
     Required,
@@ -17,8 +23,16 @@ from pydantic.schema import model_process_schema
 from pydantic.utils import lenient_issubclass
 
 from flask_ninja.constants import REF_PREFIX, ApiConfigError
-from flask_ninja.param import FuncParam, ParamType
+from flask_ninja.param import FuncParam, Header, ParamType, Query
 
+sequence_shapes = {
+    SHAPE_LIST,
+    SHAPE_SET,
+    SHAPE_FROZENSET,
+    SHAPE_TUPLE,
+    SHAPE_SEQUENCE,
+    SHAPE_TUPLE_ELLIPSIS,
+}
 sequence_types = (list, set, tuple)
 
 
@@ -61,6 +75,20 @@ def is_scalar_field(field: ModelField) -> bool:
             return False
 
     return True
+
+
+def is_scalar_sequence_field(field: ModelField) -> bool:
+    if (field.shape in sequence_shapes) and not lenient_issubclass(
+        field.type_, BaseModel
+    ):
+        if field.sub_fields is not None:
+            for sub_field in field.sub_fields:
+                if not is_scalar_field(sub_field):
+                    return False
+        return True
+    if lenient_issubclass(field.type_, sequence_types):
+        return True
+    return False
 
 
 def get_model_definitions(
@@ -148,6 +176,8 @@ def get_param_model_field(
         else:
             field.field_info.in_ = ParamType.BODY  # type:ignore
 
+    if isinstance(param.default, (Query, Header)) and is_scalar_sequence_field(field):
+        return field
     if field.field_info.in_ != ParamType.BODY and not is_scalar_field(  # type:ignore
         field
     ):

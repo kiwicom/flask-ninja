@@ -27,7 +27,7 @@ from .models import (
 from .param import FuncParam
 from .parse_rule import parse_rule
 from .security import HttpAuthBase
-from .utils import create_model_field, get_param_model_field
+from .utils import create_model_field, get_param_model_field, is_scalar_sequence_field
 
 ModelNameMapType = dict[Union[Type[BaseModel], Type[Enum]], str]
 
@@ -87,9 +87,14 @@ class Operation:
                 # Parse query params
                 field_info = cast(FuncParam, param.field_info)
                 if field_info.in_ == ParamType.QUERY and param.name in request.args:
-                    kwargs[param.name] = parse_obj_as(
-                        param.type_, request.args[param.alias]
-                    )
+                    if is_scalar_sequence_field(param):
+                        kwargs[param.name] = parse_obj_as(
+                            param.outer_type_, request.args.getlist(param.alias)
+                        )
+                    else:
+                        kwargs[param.name] = parse_obj_as(
+                            param.type_, request.args[param.alias]
+                        )
                 elif field_info.in_ == ParamType.HEADER:
                     kwargs[param.name] = parse_obj_as(
                         param.type_, request.headers.get(param.alias)
