@@ -1,15 +1,13 @@
-import json
 import re
 from typing import Any, Callable, Optional
 
 from flask import Blueprint, Flask, render_template
-from pydantic.schema import get_flat_models_from_fields, get_model_name_map
+from pydantic.json_schema import GenerateJsonSchema
 
 from .constants import NOT_SET
 from .models import Components, Info, OpenAPI, Server
 from .router import Router
 from .swagger_ui import swagger_ui_path
-from .utils import get_model_definitions
 
 
 class NinjaAPI:
@@ -70,7 +68,7 @@ class NinjaAPI:
     def add_router(self, router: Router, prefix: str = "") -> None:
         self.router.add_router(router, f"{self.prefix}{prefix}")
 
-    def get_schema(self) -> str:
+    def get_schema(self) -> dict[str, Any]:
         """Creates OpenAPI schema for the API."""
 
         # At first we collect all pydantic models used anywhere
@@ -79,17 +77,20 @@ class NinjaAPI:
         for operation in self.router.operations:
             models += operation.get_models()
 
-        # Then we create from them flat models - it means we extract the models from Generics
-        flat_models = get_flat_models_from_fields(models, known_models=set())
-        # Then we generate unique names for them - if there are two models from different modules
-        # but with the same name, we need provide different names for them in the Definitions list
-        model_name_map = get_model_name_map(flat_models)
+        schema_generator = GenerateJsonSchema(
+            ref_template="#/components/schemas/{model}"
+        )
+
+        inputs = [
+            (field, field.mode, field.type_adapter.core_schema) for field in models
+        ]
+        field_mapping, definitions = schema_generator.generate_definitions(
+            inputs=inputs
+        )
+
         paths: dict = {}
         security_schemes: dict = {}
         # Create OpenAPI schemas for all models
-        definitions = get_model_definitions(
-            flat_models=flat_models, model_name_map=model_name_map
-        )
 
         # Create OpenAPI schema for all operations
         for operation in self.router.operations:
@@ -99,7 +100,7 @@ class NinjaAPI:
             if swagger_path not in paths:
                 paths[swagger_path] = {}
             paths[swagger_path][operation.method.lower()] = operation.get_schema(
-                model_name_map=model_name_map
+                field_mapping=field_mapping
             )
             if operation.auth:
                 security_schemes.update(operation.auth.schema())
@@ -118,4 +119,4 @@ class NinjaAPI:
             servers=self.servers or None,
         )
 
-        return json.loads(schema.json(by_alias=True, exclude_none=True))
+        return schema.model_dump(mode="json", by_alias=True, exclude_none=True)

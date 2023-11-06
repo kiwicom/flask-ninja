@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, List, Optional
 
-from pydantic.fields import FieldInfo, Undefined
+from pydantic.fields import FieldInfo
 
 from flask_ninja.constants import ParamType
+from flask_ninja.model_field import Undefined
 
 
 class FuncParam(FieldInfo):
@@ -25,7 +26,7 @@ class FuncParam(FieldInfo):
         max_length: Optional[int] = None,
         regex: Optional[str] = None,
         example: Any = Undefined,
-        examples: Optional[Dict[str, Any]] = None,
+        examples: Optional[List[Any]] = None,
         deprecated: Optional[bool] = None,
         include_in_schema: bool = True,
         **extra: Any,
@@ -71,7 +72,7 @@ class Path(FuncParam):
         max_length: Optional[int] = None,
         regex: Optional[str] = None,
         example: Any = Undefined,
-        examples: Optional[Dict[str, Any]] = None,
+        examples: Optional[List[Any]] = None,
         deprecated: Optional[bool] = None,
         include_in_schema: bool = True,
         **extra: Any,
@@ -115,7 +116,7 @@ class Query(FuncParam):
         max_length: Optional[int] = None,
         regex: Optional[str] = None,
         example: Any = Undefined,
-        examples: Optional[Dict[str, Any]] = None,
+        examples: Optional[List[Any]] = None,
         deprecated: Optional[bool] = None,
         include_in_schema: bool = True,
         **extra: Any,
@@ -159,7 +160,7 @@ class Header(FuncParam):
         max_length: Optional[int] = None,
         regex: Optional[str] = None,
         example: Any = Undefined,
-        examples: Optional[Dict[str, Any]] = None,
+        examples: Optional[List[Any]] = None,
         deprecated: Optional[bool] = None,
         include_in_schema: bool = True,
         **extra: Any,
@@ -203,7 +204,7 @@ class Cookie(FuncParam):
         max_length: Optional[int] = None,
         regex: Optional[str] = None,
         example: Any = Undefined,
-        examples: Optional[Dict[str, Any]] = None,
+        examples: Optional[List[Any]] = None,
         deprecated: Optional[bool] = None,
         include_in_schema: bool = True,
         **extra: Any,
@@ -228,13 +229,13 @@ class Cookie(FuncParam):
         )
 
 
-class Body(FieldInfo):
+class Body(FuncParam):
+    in_ = ParamType.BODY
+
     def __init__(
         self,
         default: Any = Undefined,
         *,
-        embed: bool = False,
-        media_type: str = "application/json",
         alias: Optional[str] = None,
         title: Optional[str] = None,
         description: Optional[str] = None,
@@ -246,13 +247,11 @@ class Body(FieldInfo):
         max_length: Optional[int] = None,
         regex: Optional[str] = None,
         example: Any = Undefined,
-        examples: Optional[Dict[str, Any]] = None,
+        examples: Optional[List[Any]] = None,
+        deprecated: Optional[bool] = None,
+        include_in_schema: bool = True,
         **extra: Any,
     ):
-        self.embed = embed
-        self.media_type = media_type
-        self.example = example
-        self.examples = examples
         super().__init__(
             default=default,
             alias=alias,
@@ -265,6 +264,10 @@ class Body(FieldInfo):
             min_length=min_length,
             max_length=max_length,
             regex=regex,
+            deprecated=deprecated,
+            example=example,
+            examples=examples,
+            include_in_schema=include_in_schema,
             **extra,
         )
 

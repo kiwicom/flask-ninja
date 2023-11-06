@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from flask import Flask
-from pydantic.fields import ModelField
 
 from flask_ninja.constants import NOT_SET
+from flask_ninja.model_field import ModelField
 from flask_ninja.operation import Callback, Operation
 
 

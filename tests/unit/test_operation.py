@@ -1,11 +1,10 @@
 # pylint: disable=protected-access, unused-argument,disallowed-name
-import json
 from datetime import datetime
-from typing import Mapping, Union
+from typing import Union
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic.schema import get_flat_models_from_fields, get_model_name_map
+from pydantic.json_schema import GenerateJsonSchema
 from werkzeug.datastructures import MultiDict
 
 from flask_ninja import Header, Query
@@ -52,13 +51,13 @@ def view_func_none_return() -> None:
         pytest.param(
             None,
             view_func_str,
-            {200: create_model_field(name="Response 200", type_=str, required=True)},
+            {200: create_model_field(name="Response 200", type_=str)},
             id="generate str 200 response",
         ),
         pytest.param(
             None,
             view_func_pydantic_object,
-            {200: create_model_field(name="Response 200", type_=Server, required=True)},
+            {200: create_model_field(name="Response 200", type_=Server)},
             id="generate object response",
         ),
         pytest.param(
@@ -66,7 +65,8 @@ def view_func_none_return() -> None:
             view_func_list,
             {
                 200: create_model_field(
-                    name="Response 200", type_=list[Server], required=True
+                    name="Response 200",
+                    type_=list[Server],
                 )
             },
             id="generate list response",
@@ -76,7 +76,8 @@ def view_func_none_return() -> None:
             view_func_list_dict,
             {
                 200: create_model_field(
-                    name="Response 200", type_=list[dict[str, Server]], required=True
+                    name="Response 200",
+                    type_=list[dict[str, Server]],
                 )
             },
             id="generate list dict response",
@@ -85,25 +86,21 @@ def view_func_none_return() -> None:
             {200: list[Server], 202: dict[str, Server]},
             view_func_union,
             {
-                200: create_model_field(
-                    name="Response 200", type_=list[Server], required=True
-                ),
-                202: create_model_field(
-                    name="Response 202", type_=Mapping[str, Server], required=True
-                ),
+                200: create_model_field(name="Response 200", type_=list[Server]),
+                202: create_model_field(name="Response 202", type_=dict[str, Server]),
             },
             id="Multiple responses - Union return type",
         ),
         pytest.param(
             Server,
             view_func_pydantic_object,
-            {200: create_model_field(name="Response 200", type_=Server, required=True)},
+            {200: create_model_field(name="Response 200", type_=Server)},
             id="Specified response",
         ),
         pytest.param(
             {"200": str},
             view_func_str,
-            {200: create_model_field(name="Response 200", type_=str, required=True)},
+            {200: create_model_field(name="Response 200", type_=str)},
             id="string return codes",
         ),
     ],
@@ -171,89 +168,76 @@ def test_get_schema():
     )
 
     models = operation.get_models()
-    flat_models = get_flat_models_from_fields(models, known_models=set())
-    model_name_map = get_model_name_map(flat_models)
 
-    assert operation.get_schema(model_name_map=model_name_map).json(
-        by_alias=True, exclude_none=True
-    ) == json.dumps(
-        {
-            "summary": "Some title.",
-            "description": "Some long description",
-            "parameters": [
-                {
-                    "description": "Some int",
-                    "required": True,
-                    "schema": {
-                        "title": "Bid",
-                        "type": "integer",
-                        "description": "Some int",
-                    },
-                    "name": "bid",
-                    "in": "query",
-                }
-            ],
-            "requestBody": {
+    schema_generator = GenerateJsonSchema(ref_template="#/components/schemas/{model}")
+    inputs = [(field, field.mode, field.type_adapter.core_schema) for field in models]
+    field_mapping, _ = schema_generator.generate_definitions(inputs=inputs)
+
+    assert operation.get_schema(field_mapping=field_mapping).model_dump(
+        by_alias=True, exclude_none=True, mode="json"
+    ) == {
+        "summary": "Some title.",
+        "description": "Some long description",
+        "parameters": [
+            {
+                "description": "Some int",
+                "required": True,
+                "schema": {"type": "integer"},
+                "name": "bid",
+                "in": "query",
+            }
+        ],
+        "requestBody": {
+            "description": "",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/Server"}}
+            },
+            "required": True,
+        },
+        "responses": {
+            "200": {
                 "description": "",
                 "content": {
                     "application/json": {
-                        "schema": {
-                            "title": "Server",
-                            "allOf": [{"$ref": "#/components/schemas/Server"}],
-                            "description": "Some server",
-                        }
+                        "schema": {"$ref": "#/components/schemas/Server"}
                     }
                 },
-                "required": True,
-            },
-            "responses": {
-                "200": {
-                    "description": "",
-                    "content": {
-                        "application/json": {
-                            "schema": {"$ref": "#/components/schemas/Server"}
-                        }
-                    },
-                }
-            },
-            "callbacks": {
-                "callback": {
-                    "someurl": {
-                        "get": {
-                            "parameters": [
-                                {
-                                    "description": "Some callback param description",
-                                    "required": True,
-                                    "schema": {
-                                        "title": "Get Param",
-                                        "type": "integer",
-                                        "description": "Some callback param description",
-                                    },
-                                    "name": "get_param",
-                                    "in": "query",
-                                }
-                            ],
-                            "requestBody": {
-                                "content": {
-                                    "application/json": {
-                                        "schema": {
-                                            "$ref": "#/components/schemas/Server"
-                                        }
-                                    }
-                                },
+            }
+        },
+        "callbacks": {
+            "callback": {
+                "someurl": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "description": "Some callback param description",
                                 "required": True,
+                                "schema": {
+                                    "type": "null",
+                                    "description": "Some callback param description",
+                                },
+                                "name": "get_param",
+                                "in": "query",
+                            }
+                        ],
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Server"}
+                                }
                             },
-                            "responses": {
-                                "200": {"description": "Success"},
-                                "500": {"description": "Error"},
-                            },
-                        }
+                            "required": True,
+                        },
+                        "responses": {
+                            "200": {"description": "Success"},
+                            "500": {"description": "Error"},
+                        },
                     }
                 }
-            },
-            "security": [{"bearerTokenAuth": []}],
-        }
-    )
+            }
+        },
+        "security": [{"bearerTokenAuth": []}],
+    }
 
 
 @pytest.mark.parametrize(
