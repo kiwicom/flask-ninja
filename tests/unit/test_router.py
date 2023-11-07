@@ -35,7 +35,7 @@ def test_add_route_all_params():
     assert router.operations[0].path == "/foo"
     assert router.operations[0].method == "GET"
     assert str(router.operations[0].responses) == str(
-        {200: create_model_field(name="Response 200", type_=str, required=True)}
+        {200: create_model_field(name="Response 200", type_=str)}
     )
     assert router.operations[0].callbacks == [callback]
     assert router.operations[0].summary == "some_summary"
@@ -57,7 +57,7 @@ def test_add_route_no_params():
     assert router.operations[0].path == "/foo"
     assert router.operations[0].method == "GET"
     assert str(router.operations[0].responses) == str(
-        {200: create_model_field(name="Response 200", type_=str, required=True)}
+        {200: create_model_field(name="Response 200", type_=str)}
     )
     assert router.operations[0].callbacks is None
     assert router.operations[0].summary == ""

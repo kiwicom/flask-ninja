@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "flask-ninja"
-version = "1.2.2"
+version = "1.3.0"
 description = "Flask Ninja is a web framework for building APIs with Flask and Python 3.9+ type hints."
 readme = "README.md"
 authors = ["Michal Korbela <michal.korbela@kiwi.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-Flask = ">=1.1.2"
-pydantic = "^1.9.0"
+Flask = ">=2.3.0"
+pydantic = "^2.4.2"
 docstring-parser = "^0.14.1"
 
 [tool.poetry.dev-dependencies]

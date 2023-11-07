@@ -1,8 +1,7 @@
-from typing import Any, Dict, Optional
-
-from pydantic.fields import Undefined
+from typing import Any, List, Optional
 
 from . import param
+from .model_field import Undefined
 
 
 def Path(
@@ -19,7 +18,7 @@ def Path(
     max_length: Optional[int] = None,
     regex: Optional[str] = None,
     example: Any = Undefined,
-    examples: Optional[Dict[str, Any]] = None,
+    examples: Optional[List[Any]] = None,
     deprecated: Optional[bool] = None,
     include_in_schema: bool = True,
     **extra: Any,
@@ -58,7 +57,7 @@ def Query(
     max_length: Optional[int] = None,
     regex: Optional[str] = None,
     example: Any = Undefined,
-    examples: Optional[Dict[str, Any]] = None,
+    examples: Optional[List[Any]] = None,
     deprecated: Optional[bool] = None,
     include_in_schema: bool = True,
     **extra: Any,
@@ -98,12 +97,53 @@ def Header(
     max_length: Optional[int] = None,
     regex: Optional[str] = None,
     example: Any = Undefined,
-    examples: Optional[Dict[str, Any]] = None,
+    examples: Optional[List[Any]] = None,
     deprecated: Optional[bool] = None,
     include_in_schema: bool = True,
     **extra: Any,
 ) -> Any:
     return param.Header(
+        default=default,
+        alias=alias,
+        convert_underscores=convert_underscores,
+        title=title,
+        description=description,
+        gt=gt,
+        ge=ge,
+        lt=lt,
+        le=le,
+        min_length=min_length,
+        max_length=max_length,
+        regex=regex,
+        example=example,
+        examples=examples,
+        deprecated=deprecated,
+        include_in_schema=include_in_schema,
+        **extra,
+    )
+
+
+def Body(
+    default: Any = Undefined,
+    *,
+    alias: Optional[str] = None,
+    convert_underscores: bool = True,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    gt: Optional[float] = None,
+    ge: Optional[float] = None,
+    lt: Optional[float] = None,
+    le: Optional[float] = None,
+    min_length: Optional[int] = None,
+    max_length: Optional[int] = None,
+    regex: Optional[str] = None,
+    example: Any = Undefined,
+    examples: Optional[List[Any]] = None,
+    deprecated: Optional[bool] = None,
+    include_in_schema: bool = True,
+    **extra: Any,
+) -> Any:
+    return param.Body(
         default=default,
         alias=alias,
         convert_underscores=convert_underscores,

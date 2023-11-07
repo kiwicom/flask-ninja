@@ -7,6 +7,6 @@ def get_path(rel: str) -> str:
     )
 
 
-swagger_ui_4_12_0_path = get_path("swagger-ui-4.12.0")
+swagger_ui_5_9_1_path = get_path("swagger-ui-5.9.1")
 
-swagger_ui_path = swagger_ui_4_12_0_path
+swagger_ui_path = swagger_ui_5_9_1_path

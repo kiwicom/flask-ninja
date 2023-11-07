@@ -1,6 +1,5 @@
 # pylint:disable=comparison-with-callable
 import inspect
-import json
 import re
 from collections import defaultdict
 from enum import Enum
@@ -8,11 +7,10 @@ from typing import Any, Callable, Dict, Optional, Type, Union, cast, get_origin
 
 from docstring_parser import parse as doc_parse
 from flask import jsonify, request
-from pydantic import BaseModel, ValidationError, parse_obj_as
-from pydantic.fields import ModelField, Undefined
-from pydantic.schema import field_schema
+from pydantic import BaseModel, ConfigDict, ValidationError
 
-from .constants import NOT_SET, REF_PREFIX, ApiConfigError, ParamType
+from .constants import NOT_SET, ApiConfigError, ParamType
+from .model_field import FieldMapping, ModelField, Undefined
 from .models import MediaType
 from .models import Operation as OAPIOperation
 from .models import (
@@ -27,7 +25,7 @@ from .models import (
 from .param import FuncParam
 from .parse_rule import parse_rule
 from .security import HttpAuthBase
-from .utils import create_model_field, get_param_model_field, is_scalar_sequence_field
+from .utils import analyze_param, create_model_field, is_scalar_sequence_field
 
 ModelNameMapType = dict[Union[Type[BaseModel], Type[Enum]], str]
 
@@ -35,20 +33,26 @@ ModelNameMapType = dict[Union[Type[BaseModel], Type[Enum]], str]
 class SerializationModel(BaseModel):
     data: Any
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class Callback(BaseModel):
     name: str
     url: str
     method: str
-    request_body: Optional[Any]
-    params: Optional[list[ModelField]]
+    request_body: Optional[Type] = None
+    params: Optional[list[ModelField]] = None
     response_codes: dict[int, str]
+    field: Optional[ModelField] = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def model_post_init(self, __context: Any) -> None:
+        self.field = (
+            create_model_field(self.name, self.request_body)
+            if self.request_body
+            else None
+        )
 
 
 class Operation:
@@ -88,20 +92,22 @@ class Operation:
                 field_info = cast(FuncParam, param.field_info)
                 if field_info.in_ == ParamType.QUERY and param.name in request.args:
                     if is_scalar_sequence_field(param):
-                        kwargs[param.name] = parse_obj_as(
-                            param.outer_type_, request.args.getlist(param.alias)
+                        kwargs[param.name] = param.type_adapter.validate_python(
+                            request.args.getlist(param.alias)
                         )
                     else:
-                        kwargs[param.name] = parse_obj_as(
-                            param.type_, request.args[param.alias]
+                        kwargs[param.name] = param.type_adapter.validate_python(
+                            request.args[param.alias]
                         )
                 elif field_info.in_ == ParamType.HEADER:
-                    kwargs[param.name] = parse_obj_as(
-                        param.type_, request.headers.get(param.alias)
+                    kwargs[param.name] = param.type_adapter.validate_python(
+                        request.headers.get(param.alias)
                     )
                 # Parse request body
                 elif field_info.in_ == ParamType.BODY:
-                    kwargs[param.name] = parse_obj_as(param.outer_type_, request.json)
+                    kwargs[param.name] = param.type_adapter.validate_python(
+                        request.json
+                    )
         except ValidationError as validation_error:
             return validation_error.json(), 400
 
@@ -114,7 +120,7 @@ class Operation:
             # e.g. list[str], dict[str, Response], etc, we can't use isinstance and
             # at first need to get the unspecified generic type - e.g. list, dict, etc
             # TODO match also the inner types of generics - but that's a corner case
-            if isinstance(resp, get_origin(model.outer_type_) or model.outer_type_):
+            if isinstance(resp, get_origin(model.type_) or model.type_):
                 # hotfix: if the resp is str we shouldn't use jsonify as it
                 # changes the response adding additional characters.
                 if isinstance(resp, str):
@@ -154,30 +160,28 @@ class Operation:
         if func_return_type:
             if get_origin(func_return_type) == Union:
                 for ret_type in func_return_type.__args__:
-                    if not any(
-                        resp.outer_type_ != ret_type for resp in responses.values()
-                    ):
+                    if not any(resp.type_ != ret_type for resp in responses.values()):
                         raise ApiConfigError(
                             f"Return type {ret_type} http code must be specified explicitly."
                         )
 
             # If we specified different return type as we specified as response
-            elif 200 in responses and responses[200].outer_type_ != func_return_type:
+            elif (
+                200 in responses
+                and responses[200].field_info.annotation != func_return_type
+            ):
                 raise ApiConfigError(
-                    f"Return type of the function {type(func_return_type)} does not match response type {type(responses[200].outer_type_)}"
+                    f"Return type of the function {type(func_return_type)} does not match response type {type(responses[200].type_)}"
                 )
         return responses
 
     @classmethod
     def serialize(cls, resp: Any) -> Any:
-        """Convert response object into json serializable object.
-
-        TODO: Avoid json serialization and deserialization.
-        """
-        return json.loads(SerializationModel(data=resp).json())["data"]
+        """Convert response object into json serializable object."""
+        return SerializationModel(data=resp).model_dump(mode="json")["data"]
 
     def get_callback_schema(
-        self, cb: Callback, model_name_map: ModelNameMapType
+        self, cb: Callback, field_mapping: FieldMapping
     ) -> dict[str, PathItem]:
         """Generate schema for a callback.
 
@@ -186,12 +190,8 @@ class Operation:
         to declare callbacks.
         """
 
-        if cb.request_body:
-            request_body, _, _ = field_schema(
-                create_model_field("Callback", cb.request_body),
-                model_name_map=model_name_map,
-                ref_prefix=REF_PREFIX,
-            )
+        if cb.field:
+            request_body = field_mapping[(cb.field, "validation")]
         else:
             request_body = None
 
@@ -207,12 +207,8 @@ class Operation:
                 name=param.alias,
                 in_=ParameterInType(field_info.in_.value),
                 # Undefined type is tricky, because it can't be serialized
-                required=None if param.required == Undefined else bool(param.required),
-                schema_=Schema.parse_obj(
-                    field_schema(
-                        param, model_name_map=model_name_map, ref_prefix=REF_PREFIX
-                    )[0]
-                ),
+                required=param.required,
+                schema_=Schema.model_validate(field_mapping[(param, "validation")]),
                 description=field_info.description,
                 examples=field_info.examples,
                 example=field_info.example if field_info.example != Undefined else None,
@@ -236,12 +232,9 @@ class Operation:
             },
         )
 
-        return {cb.url: PathItem.parse_obj({cb.method.lower(): schema})}
+        return {cb.url: PathItem.model_validate({cb.method.lower(): schema})}
 
-    def get_openapi_parameters(
-        self,
-        model_name_map: ModelNameMapType,
-    ) -> list[Parameter]:
+    def get_openapi_parameters(self, field_mapping: FieldMapping) -> list[Parameter]:
         """Create OpenAPI schema for parameters of this operation."""
         parameters = []
         for param in self.params:
@@ -254,23 +247,19 @@ class Operation:
             parameter = Parameter(
                 name=param.alias,
                 in_=ParameterInType(field_info.in_.value),
-                required=None if param.required == Undefined else bool(param.required),
-                schema_=Schema.parse_obj(
-                    field_schema(
-                        param, model_name_map=model_name_map, ref_prefix=REF_PREFIX
-                    )[0]
-                ),
+                required=param.required,
+                schema_=Schema.model_validate(field_mapping[(param, "validation")]),
                 description=field_info.description,
                 examples=field_info.examples,
                 example=field_info.example if field_info.example != Undefined else None,
                 deprecated=field_info.deprecated,
             )
-            parameters.append(Parameter.parse_obj(parameter))
+            parameters.append(Parameter.model_validate(parameter))
 
         return parameters
 
     def get_openapi_request_body(
-        self, model_name_map: ModelNameMapType
+        self, field_mapping: FieldMapping
     ) -> Optional[RequestBody]:
         """Create OpenAPI schema for request body of this operation.
 
@@ -279,14 +268,11 @@ class Operation:
         for param in self.params:
             field_info = cast(FuncParam, param.field_info)
             if field_info.in_ == ParamType.BODY:
-                request_body, _, _ = field_schema(
-                    param, model_name_map=model_name_map, ref_prefix=REF_PREFIX
-                )
-
+                request_body = field_mapping[(param, "validation")]
                 return RequestBody(
                     content={
                         "application/json": MediaType(
-                            schema_=Schema.parse_obj(request_body),
+                            schema_=Schema.model_validate(request_body),
                         )
                     },
                     description="",
@@ -294,27 +280,24 @@ class Operation:
                 )
         return None
 
-    def get_schema(self, model_name_map: ModelNameMapType) -> OAPIOperation:
+    def get_schema(self, field_mapping: FieldMapping) -> OAPIOperation:
         """Create OpenAPI schema for this operation."""
         doc = doc_parse(self.view_func.__doc__ or "")
         responses: Dict[str, Response] = {}
 
         for code, response in self.responses.items():
-            response_schema, _, _ = field_schema(
-                response, model_name_map=model_name_map, ref_prefix=REF_PREFIX
-            )
-
+            response_schema = field_mapping[(response, "validation")]
             responses[str(code)] = Response(
                 content={
                     "application/json": MediaType(
-                        schema_=Schema.parse_obj(response_schema)
+                        schema_=Schema.model_validate(response_schema)
                     )
                 },
                 description="",
             )
 
         callbacks = {
-            cb.name: self.get_callback_schema(cb, model_name_map=model_name_map)
+            cb.name: self.get_callback_schema(cb, field_mapping=field_mapping)
             for cb in (self.callbacks or [])
         }
 
@@ -322,9 +305,9 @@ class Operation:
             summary=doc.short_description or self.summary,
             description=doc.long_description or self.description,
             responses=responses,
-            parameters=self.get_openapi_parameters(model_name_map=model_name_map)
+            parameters=self.get_openapi_parameters(field_mapping=field_mapping)
             or None,  # type:ignore
-            requestBody=self.get_openapi_request_body(model_name_map=model_name_map),
+            requestBody=self.get_openapi_request_body(field_mapping=field_mapping),
             security=[{self.auth.schema_name: []}] if self.auth else None,
             callbacks=callbacks or None,
         )
@@ -352,10 +335,12 @@ class Operation:
         # Additional attributes for a parameter are set via the default value
         # we retrieve the default value using inspect, and we convert it
         # to a ModelField get_param_model_field function
-        for param in inspect.signature(self.view_func).parameters.values():
-            model_field = get_param_model_field(
-                param=param,
-                force_type=ParamType.PATH if param.name in path_param_names else None,
+        for param_name, param in inspect.signature(self.view_func).parameters.items():
+            model_field = analyze_param(
+                param_name=param_name,
+                annotation=param.annotation,
+                value=param.default,
+                is_path_param=param.name in path_param_names,
             )
             if param.name in param_docs and not model_field.field_info.description:
                 model_field.field_info.description = param_docs[param.name]
@@ -384,10 +369,12 @@ class Operation:
         return (
             self.params
             + list(self.responses.values())
+            + list(cb.field for cb in (self.callbacks or []) if cb.field)
             + list(
-                create_model_field(cb.name, cb.request_body)
+                param
                 for cb in (self.callbacks or [])
                 if cb.request_body
+                for param in (cb.params or [])
             )
         )
 
